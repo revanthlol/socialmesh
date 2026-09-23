@@ -1,0 +1,25 @@
+{
+  "name": "socialmesh",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22.11 <25",
+    "pnpm": ">=9 <11"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @socialmesh/web --filter @socialmesh/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "prisma:generate": "pnpm --filter @socialmesh/api prisma:generate",
+    "prisma:migrate": "pnpm --filter @socialmesh/api prisma:migrate"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
+}

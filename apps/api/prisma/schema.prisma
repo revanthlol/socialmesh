@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  OWNER
+  MEMBER
+}
+
+enum SocialProvider {
+  FACEBOOK_PAGE
+  INSTAGRAM
+  LINKEDIN_MEMBER
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  REAUTH_REQUIRED
+  REVOKED
+  ERROR
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum TargetStatus {
+  DRAFT
+  SCHEDULED
+  DISPATCHED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+enum MediaStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  READY
+  REJECTED
+  DELETED
+}
+
+enum AttemptStatus {
+  STARTED
+  SUCCEEDED
+  RETRYABLE_FAILURE
+  TERMINAL_FAILURE
+}
+
+model User {
+  id           String       @id @default(uuid()) @db.Uuid
+  email        String       @unique @db.Citext
+  passwordHash String       @map("password_hash")
+  displayName  String       @map("display_name")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  sessions     Session[]
+  memberships  Membership[]
+  createdPosts Post[]       @relation("PostCreator")
+  auditLogs    AuditLog[]   @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  tokenHash  String   @unique @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  ipHash     String?  @map("ip_hash")
+  userAgent  String?  @map("user_agent")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Workspace {
+  id             String          @id @default(uuid()) @db.Uuid
+  name           String
+  timezone       String          @default("UTC")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  memberships    Membership[]
+  socialAccounts SocialAccount[]
+  posts          Post[]
+  mediaAssets    MediaAsset[]
+  auditLogs      AuditLog[]
+
+  @@map("workspaces")
+}
+
+model Membership {
+  id          String        @id @default(uuid()) @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId, role])
+  @@map("memberships")
+}
+
+model OAuthState {
+  id           String         @id @default(uuid()) @db.Uuid
+  workspaceId  String         @map("workspace_id") @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  provider     SocialProvider
+  stateHash    String         @unique @map("state_hash")
+  pkceVerifier String?        @map("pkce_verifier")
+  redirectPath String         @default("/settings/accounts") @map("redirect_path")
+  expiresAt    DateTime       @map("expires_at")
+  consumedAt   DateTime?      @map("consumed_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@index([workspaceId, provider])
+  @@map("oauth_states")
+}
+
+model SocialAccount {
+  id                     String           @id @default(uuid()) @db.Uuid
+  workspaceId            String           @map("workspace_id") @db.Uuid
+  provider               SocialProvider
+  providerAccountId      String           @map("provider_account_id")
+  displayName            String           @map("display_name")
+  username               String?
+  avatarUrl              String?          @map("avatar_url")
+  status                 ConnectionStatus @default(ACTIVE)
+  grantedScopes          String[]         @default([]) @map("granted_scopes")
+  accessTokenCiphertext  Bytes            @map("access_token_ciphertext")
+  refreshTokenCiphertext Bytes?           @map("refresh_token_ciphertext")
+  tokenExpiresAt         DateTime?         @map("token_expires_at")
+  encryptionKeyVersion   Int              @default(1) @map("encryption_key_version")
+  providerMetadata       Json?            @map("provider_metadata")
+  lastValidatedAt        DateTime?         @map("last_validated_at")
+  lastErrorCode          String?           @map("last_error_code")
+  lastErrorAt            DateTime?         @map("last_error_at")
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
+  workspace              Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  targets                PostTarget[]
+
+  @@unique([workspaceId, provider, providerAccountId])
+  @@index([workspaceId, provider, status])
+  @@index([tokenExpiresAt])
+  @@map("social_accounts")
+}
+
+model Post {
+  id             String       @id @default(uuid()) @db.Uuid
+  workspaceId    String       @map("workspace_id") @db.Uuid
+  createdById    String       @map("created_by_id") @db.Uuid
+  content        String
+  status         PostStatus   @default(DRAFT)
+  scheduledFor   DateTime?    @map("scheduled_for")
+  timezone       String       @default("UTC")
+  publishedAt    DateTime?    @map("published_at")
+  lastErrorCode  String?      @map("last_error_code")
+  lastError      String?      @map("last_error")
+  version        Int          @default(1)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy      User         @relation("PostCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  targets        PostTarget[]
+  media          PostMedia[]
+  publishAttempts PublishAttempt[]
+
+  @@index([workspaceId, status, scheduledFor])
+  @@index([status, scheduledFor])
+  @@index([createdById, createdAt])
+  @@map("posts")
+}
+
+model PostTarget {
+  id                String        @id @default(uuid()) @db.Uuid
+  postId            String        @map("post_id") @db.Uuid
+  socialAccountId   String        @map("social_account_id") @db.Uuid
+  status            TargetStatus  @default(DRAFT)
+  scheduledFor      DateTime?     @map("scheduled_for")
+  providerPostId    String?       @map("provider_post_id")
+  providerPostUrl   String?       @map("provider_post_url")
+  qstashMessageId   String?       @map("qstash_message_id")
+  dispatchGeneration Int          @default(0) @map("dispatch_generation")
+  nextAttemptAt     DateTime?     @map("next_attempt_at")
+  attemptCount      Int           @default(0) @map("attempt_count")
+  lastErrorCode     String?       @map("last_error_code")
+  lastError         String?       @map("last_error")
+  publishedAt       DateTime?     @map("published_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  post              Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount     SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  attempts          PublishAttempt[]
+
+  @@unique([postId, socialAccountId])
+  @@index([status, scheduledFor])
+  @@index([status, nextAttemptAt])
+  @@index([qstashMessageId])
+  @@map("post_targets")
+}
+
+model MediaAsset {
+  id            String      @id @default(uuid()) @db.Uuid
+  workspaceId   String      @map("workspace_id") @db.Uuid
+  kind          MediaKind
+  status        MediaStatus @default(PENDING_UPLOAD)
+  objectKey     String      @unique @map("object_key")
+  originalName  String      @map("original_name")
+  mimeType      String      @map("mime_type")
+  byteSize      BigInt      @map("byte_size")
+  checksumSha256 String?    @map("checksum_sha256")
+  width         Int?
+  height        Int?
+  durationMs    Int?        @map("duration_ms")
+  altText       String?     @map("alt_text")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  deletedAt     DateTime?   @map("deleted_at")
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts         PostMedia[]
+
+  @@index([workspaceId, status, createdAt])
+  @@map("media_assets")
+}
+
+model PostMedia {
+  postId       String     @map("post_id") @db.Uuid
+  mediaAssetId String     @map("media_asset_id") @db.Uuid
+  position     Int        @default(0)
+  post         Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+
+  @@id([postId, mediaAssetId])
+  @@unique([postId, position])
+  @@map("post_media")
+}
+
+model PublishAttempt {
+  id                String        @id @default(uuid()) @db.Uuid
+  postId            String        @map("post_id") @db.Uuid
+  postTargetId      String        @map("post_target_id") @db.Uuid
+  idempotencyKey    String        @unique @map("idempotency_key")
+  attemptNumber     Int           @map("attempt_number")
+  status            AttemptStatus
+  providerRequestId String?       @map("provider_request_id")
+  providerPostId    String?       @map("provider_post_id")
+  httpStatus        Int?          @map("http_status")
+  errorCode         String?       @map("error_code")
+  errorMessage      String?       @map("error_message")
+  retryAfterSeconds Int?          @map("retry_after_seconds")
+  startedAt         DateTime      @default(now()) @map("started_at")
+  finishedAt        DateTime?     @map("finished_at")
+  post              Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postTarget        PostTarget    @relation(fields: [postTargetId], references: [id], onDelete: Cascade)
+
+  @@unique([postTargetId, attemptNumber])
+  @@index([postId, startedAt])
+  @@index([status, startedAt])
+  @@map("publish_attempts")
+}
+
+model WebhookEvent {
+  id              String         @id @default(uuid()) @db.Uuid
+  provider        SocialProvider
+  providerEventId String?        @map("provider_event_id")
+  payloadHash     String         @map("payload_hash")
+  eventType       String?        @map("event_type")
+  payload         Json
+  processedAt     DateTime?      @map("processed_at")
+  error           String?
+  receivedAt      DateTime       @default(now()) @map("received_at")
+
+  @@unique([provider, providerEventId])
+  @@index([provider, payloadHash])
+  @@index([processedAt, receivedAt])
+  @@map("webhook_events")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  actorUserId String?   @map("actor_user_id") @db.Uuid
+  action      String
+  entityType  String    @map("entity_type")
+  entityId    String?   @map("entity_id")
+  metadata    Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor       User?     @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
