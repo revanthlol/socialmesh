@@ -1,31 +1,39 @@
-const architecture = [
-  ["Web", "React on Vercel"],
-  ["API", "Express on the Oracle VPS"],
-  ["Data", "Neon PostgreSQL via Prisma"],
-  ["Jobs", "Upstash QStash rolling scheduler"],
-  ["Media", "Cloudflare R2"],
-] as const;
+import { Routes, Route, Navigate } from "react-router-dom";
+import { LoginPage } from "./pages/LoginPage.js";
+import { RegisterPage } from "./pages/RegisterPage.js";
+import { WorkspaceRedirect } from "./pages/WorkspaceRedirect.js";
+import { AppLayout } from "./components/layout/AppLayout.js";
+import { OverviewPage } from "./pages/OverviewPage.js";
+import { ComposePage } from "./pages/ComposePage.js";
+import { MediaPage } from "./pages/MediaPage.js";
+import { PostsPage } from "./pages/PostsPage.js";
+import { CalendarPage } from "./pages/CalendarPage.js";
+import { AccountsPage } from "./pages/AccountsPage.js";
+import { SettingsPage } from "./pages/SettingsPage.js";
 
 export function App() {
   return (
-    <main className="shell">
-      <section aria-labelledby="page-title" className="panel">
-        <p className="eyebrow">SociaMesh bootstrap</p>
-        <h1 id="page-title">The project is wired and ready for implementation.</h1>
-        <p className="lede">
-          This screen is deliberately minimal. Build the authenticated dashboard from the
-          requirements in PRD.md, then replace this bootstrap route.
-        </p>
+    <Routes>
+      {/* Public Authentication Routes */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
 
-        <dl className="architecture">
-          {architecture.map(([label, value]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-    </main>
+      {/* Authenticated Workspace Redirect */}
+      <Route path="/app" element={<WorkspaceRedirect />} />
+
+      {/* Authenticated Workspace Shell */}
+      <Route path="/app/:workspaceId" element={<AppLayout />}>
+        <Route index element={<OverviewPage />} />
+        <Route path="compose" element={<ComposePage />} />
+        <Route path="media" element={<MediaPage />} />
+        <Route path="posts" element={<PostsPage />} />
+        <Route path="calendar" element={<CalendarPage />} />
+        <Route path="accounts" element={<AccountsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+      </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/app" replace />} />
+    </Routes>
   );
 }
