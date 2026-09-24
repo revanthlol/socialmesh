@@ -31,6 +31,7 @@ enum PostStatus {
   PUBLISHING
   PUBLISHED
   FAILED
+  CANCELLED
 }
 
 enum TargetStatus {
@@ -102,6 +103,7 @@ model Workspace {
   updatedAt      DateTime        @updatedAt @map("updated_at")
   memberships    Membership[]
   socialAccounts SocialAccount[]
+  channels       WorkspaceChannel[]
   posts          Post[]
   mediaAssets    MediaAsset[]
   auditLogs      AuditLog[]
@@ -180,6 +182,7 @@ model Post {
   publishedAt    DateTime?    @map("published_at")
   lastErrorCode  String?      @map("last_error_code")
   lastError      String?      @map("last_error")
+  postizPostId   String?      @map("postiz_post_id")
   version        Int          @default(1)
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
@@ -192,34 +195,56 @@ model Post {
   @@index([workspaceId, status, scheduledFor])
   @@index([status, scheduledFor])
   @@index([createdById, createdAt])
+  @@index([postizPostId])
   @@map("posts")
 }
 
+model WorkspaceChannel {
+  id                  String       @id @default(uuid()) @db.Uuid
+  workspaceId         String       @map("workspace_id") @db.Uuid
+  postizIntegrationId String       @map("postiz_integration_id")
+  provider            String
+  name                String
+  pictureUrl          String?      @map("picture_url")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+  workspace           Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  targets             PostTarget[]
+
+  @@unique([workspaceId, postizIntegrationId])
+  @@index([workspaceId])
+  @@map("workspace_channels")
+}
+
 model PostTarget {
-  id                String        @id @default(uuid()) @db.Uuid
-  postId            String        @map("post_id") @db.Uuid
-  socialAccountId   String        @map("social_account_id") @db.Uuid
-  status            TargetStatus  @default(DRAFT)
-  scheduledFor      DateTime?     @map("scheduled_for")
-  providerPostId    String?       @map("provider_post_id")
-  providerPostUrl   String?       @map("provider_post_url")
-  qstashMessageId   String?       @map("qstash_message_id")
-  dispatchGeneration Int          @default(0) @map("dispatch_generation")
-  nextAttemptAt     DateTime?     @map("next_attempt_at")
-  attemptCount      Int           @default(0) @map("attempt_count")
-  lastErrorCode     String?       @map("last_error_code")
-  lastError         String?       @map("last_error")
-  publishedAt       DateTime?     @map("published_at")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-  post              Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
-  socialAccount     SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  id                String            @id @default(uuid()) @db.Uuid
+  postId            String            @map("post_id") @db.Uuid
+  socialAccountId   String?           @map("social_account_id") @db.Uuid
+  channelId         String?           @map("channel_id") @db.Uuid
+  status            TargetStatus      @default(DRAFT)
+  scheduledFor      DateTime?         @map("scheduled_for")
+  providerPostId    String?           @map("provider_post_id")
+  providerPostUrl   String?           @map("provider_post_url")
+  qstashMessageId   String?           @map("qstash_message_id")
+  dispatchGeneration Int              @default(0) @map("dispatch_generation")
+  nextAttemptAt     DateTime?         @map("next_attempt_at")
+  attemptCount      Int               @default(0) @map("attempt_count")
+  lastErrorCode     String?           @map("last_error_code")
+  lastError         String?           @map("last_error")
+  publishedAt       DateTime?         @map("published_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  post              Post              @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount     SocialAccount?    @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  channel           WorkspaceChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
   attempts          PublishAttempt[]
 
   @@unique([postId, socialAccountId])
+  @@unique([postId, channelId])
   @@index([status, scheduledFor])
   @@index([status, nextAttemptAt])
   @@index([qstashMessageId])
+  @@index([channelId])
   @@map("post_targets")
 }
 
