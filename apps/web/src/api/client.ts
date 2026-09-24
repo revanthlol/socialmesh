@@ -1,6 +1,8 @@
 import type { ApiError } from "./types.js";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1"
+).replace(/\/$/, "");
 
 export class ClientError extends Error {
   public code: string;
@@ -20,7 +22,10 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
 }
 
-export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
   const { params, headers: customHeaders, ...rest } = options;
 
   let url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
@@ -76,7 +81,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 }
 
 export const api = {
-  get: <T>(path: string, options?: RequestOptions) => request<T>(path, { method: "GET", ...options }),
+  get: <T>(path: string, options?: RequestOptions) =>
+    request<T>(path, { method: "GET", ...options }),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, {
       method: "POST",
@@ -116,7 +122,9 @@ export async function uploadToPresignedUrl(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
-        reject(new Error(`Storage upload failed with HTTP status ${xhr.status}`));
+        reject(
+          new Error(`Storage upload failed with HTTP status ${xhr.status}`),
+        );
       }
     };
 

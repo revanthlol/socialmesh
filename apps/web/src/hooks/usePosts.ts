@@ -20,6 +20,7 @@ export function usePosts(workspaceId?: string, status?: PostStatus) {
     mutationFn: async (data: {
       content: string;
       mediaAssetIds?: string[];
+      channelIds?: string[];
       scheduledFor?: string | null;
       timezone?: string;
     }) => {
@@ -27,7 +28,9 @@ export function usePosts(workspaceId?: string, status?: PostStatus) {
       return await api.post<Post>(`/workspaces/${workspaceId}/posts`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId, "posts"] });
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "posts"],
+      });
       queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId] });
     },
   });
@@ -41,15 +44,21 @@ export function usePosts(workspaceId?: string, status?: PostStatus) {
       data: {
         content?: string;
         mediaAssetIds?: string[];
+        channelIds?: string[];
         scheduledFor?: string | null;
         timezone?: string;
       };
     }) => {
       if (!workspaceId) throw new Error("Workspace ID is required");
-      return await api.patch<Post>(`/workspaces/${workspaceId}/posts/${postId}`, data);
+      return await api.patch<Post>(
+        `/workspaces/${workspaceId}/posts/${postId}`,
+        data,
+      );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId, "posts"] });
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "posts"],
+      });
     },
   });
 
@@ -59,7 +68,63 @@ export function usePosts(workspaceId?: string, status?: PostStatus) {
       return await api.delete(`/workspaces/${workspaceId}/posts/${postId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId, "posts"] });
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "posts"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId] });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      if (!workspaceId) throw new Error("Workspace ID is required");
+      return await api.post<Post>(
+        `/workspaces/${workspaceId}/posts/${postId}/publish`,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "posts"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId] });
+    },
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: async ({
+      postId,
+      scheduledFor,
+    }: {
+      postId: string;
+      scheduledFor?: string;
+    }) => {
+      if (!workspaceId) throw new Error("Workspace ID is required");
+      return await api.post<Post>(
+        `/workspaces/${workspaceId}/posts/${postId}/schedule`,
+        {
+          scheduledFor,
+        },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "posts"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId] });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      if (!workspaceId) throw new Error("Workspace ID is required");
+      return await api.post<Post>(
+        `/workspaces/${workspaceId}/posts/${postId}/cancel`,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "posts"],
+      });
       queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId] });
     },
   });
@@ -75,6 +140,12 @@ export function usePosts(workspaceId?: string, status?: PostStatus) {
     isUpdating: updateDraftMutation.isPending,
     deleteDraft: deleteDraftMutation.mutateAsync,
     isDeleting: deleteDraftMutation.isPending,
+    publishPost: publishMutation.mutateAsync,
+    isPublishing: publishMutation.isPending,
+    schedulePost: scheduleMutation.mutateAsync,
+    isScheduling: scheduleMutation.isPending,
+    cancelPost: cancelMutation.mutateAsync,
+    isCancelling: cancelMutation.isPending,
   };
 }
 

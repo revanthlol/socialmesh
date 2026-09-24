@@ -9,6 +9,7 @@ import { MediaPage } from "./pages/MediaPage.js";
 import { PostsPage } from "./pages/PostsPage.js";
 import { CalendarPage } from "./pages/CalendarPage.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
+import { OAuthCallbackPage } from "./pages/OAuthCallbackPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 
 export function App() {
@@ -29,6 +30,7 @@ export function App() {
         <Route path="posts" element={<PostsPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="accounts" element={<AccountsPage />} />
+        <Route path="accounts/callback" element={<OAuthCallbackPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 

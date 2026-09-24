@@ -1,6 +1,14 @@
 import { useState, useRef, type ChangeEvent } from "react";
 import { useParams } from "react-router-dom";
-import { UploadCloud, Image as ImageIcon, Video, Trash2, AlertCircle, CheckCircle2, Eye } from "lucide-react";
+import {
+  UploadCloud,
+  Image as ImageIcon,
+  Video,
+  Trash2,
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+} from "lucide-react";
 import { useMediaList, useMediaActions } from "../hooks/useMedia.js";
 import { Button } from "../components/ui/Button.js";
 import { Badge } from "../components/ui/Badge.js";
@@ -11,12 +19,18 @@ export function MediaPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [filterKind, setFilterKind] = useState<"IMAGE" | "VIDEO" | undefined>(undefined);
+  const [filterKind, setFilterKind] = useState<"IMAGE" | "VIDEO" | undefined>(
+    undefined,
+  );
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
-  const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const { data: media = [], isLoading } = useMediaList(workspaceId, filterKind);
-  const { uploadMedia, isUploading, uploadProgress, deleteMedia, isDeleting } = useMediaActions(workspaceId);
+  const { uploadMedia, isUploading, uploadProgress, deleteMedia, isDeleting } =
+    useMediaActions(workspaceId);
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -25,7 +39,14 @@ export function MediaPage() {
     setStatusMessage(null);
 
     // Validate client-side
-    const validMimes = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/quicktime"];
+    const validMimes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "video/mp4",
+      "video/quicktime",
+    ];
     if (!validMimes.includes(file.type)) {
       setStatusMessage({
         type: "error",
@@ -52,7 +73,8 @@ export function MediaPage() {
   }
 
   async function handleDelete(mediaId: string, name: string) {
-    if (!confirm(`Are you sure you want to delete "${name}" from storage?`)) return;
+    if (!confirm(`Are you sure you want to delete "${name}" from storage?`))
+      return;
 
     try {
       await deleteMedia(mediaId);
@@ -61,7 +83,10 @@ export function MediaPage() {
         setSelectedAsset(null);
       }
     } catch (err: any) {
-      setStatusMessage({ type: "error", text: err.message || "Failed to delete asset" });
+      setStatusMessage({
+        type: "error",
+        text: err.message || "Failed to delete asset",
+      });
     }
   }
 
@@ -78,9 +103,12 @@ export function MediaPage() {
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-[#c9c5bb]">
         <div>
-          <h1 className="text-2xl font-serif font-bold text-[#161a1d]">Media Library</h1>
+          <h1 className="text-2xl font-serif font-bold text-[#161a1d]">
+            Media Library
+          </h1>
           <p className="text-xs text-[#6b706f] mt-1">
-            Private Cloudflare R2 bucket with secure direct browser uploads and signed view tokens.
+            Private Cloudflare R2 bucket with secure direct browser uploads and
+            signed view tokens.
           </p>
         </div>
 
@@ -184,7 +212,10 @@ export function MediaPage() {
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-pulse">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="aspect-square bg-[#e8e6df] rounded border border-[#c9c5bb]"></div>
+            <div
+              key={i}
+              className="aspect-square bg-[#e8e6df] rounded border border-[#c9c5bb]"
+            ></div>
           ))}
         </div>
       ) : media.length === 0 ? (
@@ -193,7 +224,11 @@ export function MediaPage() {
           title="No media in this library"
           description="Upload images (JPG, PNG, WEBP, GIF) or videos (MP4) for your social posts."
           action={
-            <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-2">
+            <Button
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="gap-2"
+            >
               <UploadCloud className="h-4 w-4" />
               Upload First Asset
             </Button>
@@ -216,7 +251,10 @@ export function MediaPage() {
                     className="w-full h-full object-cover"
                   />
                 ) : asset.kind === "VIDEO" && asset.viewUrl ? (
-                  <video src={asset.viewUrl} className="w-full h-full object-cover" />
+                  <video
+                    src={asset.viewUrl}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <div className="flex flex-col items-center gap-1 text-[#6b706f]">
                     {asset.kind === "IMAGE" ? (
@@ -224,7 +262,9 @@ export function MediaPage() {
                     ) : (
                       <Video className="h-8 w-8" />
                     )}
-                    <span className="text-[10px] font-mono">{asset.status}</span>
+                    <span className="text-[10px] font-mono">
+                      {asset.status}
+                    </span>
                   </div>
                 )}
 
@@ -252,12 +292,18 @@ export function MediaPage() {
 
               {/* Asset Metadata */}
               <div className="p-2.5 flex-1 flex flex-col justify-between">
-                <p className="text-xs font-medium text-[#161a1d] truncate" title={asset.originalName}>
+                <p
+                  className="text-xs font-medium text-[#161a1d] truncate"
+                  title={asset.originalName}
+                >
                   {asset.originalName}
                 </p>
                 <div className="flex items-center justify-between mt-1 pt-1 border-t border-[#e8e6df] text-[10px] text-[#6b706f] font-mono">
                   <span>{formatBytes(asset.byteSize)}</span>
-                  <Badge variant={asset.status === "READY" ? "success" : "neutral"} size="sm">
+                  <Badge
+                    variant={asset.status === "READY" ? "success" : "neutral"}
+                    size="sm"
+                  >
                     {asset.kind}
                   </Badge>
                 </div>
@@ -277,7 +323,8 @@ export function MediaPage() {
                   {selectedAsset.originalName}
                 </h3>
                 <p className="text-xs text-[#6b706f] font-mono mt-0.5">
-                  {selectedAsset.mimeType} • {formatBytes(selectedAsset.byteSize)}
+                  {selectedAsset.mimeType} •{" "}
+                  {formatBytes(selectedAsset.byteSize)}
                 </p>
               </div>
               <button
@@ -296,7 +343,11 @@ export function MediaPage() {
                   className="max-h-[55vh] object-contain rounded"
                 />
               ) : selectedAsset.kind === "VIDEO" && selectedAsset.viewUrl ? (
-                <video src={selectedAsset.viewUrl} controls className="max-h-[55vh] rounded" />
+                <video
+                  src={selectedAsset.viewUrl}
+                  controls
+                  className="max-h-[55vh] rounded"
+                />
               ) : null}
             </div>
 
@@ -304,7 +355,11 @@ export function MediaPage() {
               <span className="text-[11px] font-mono text-[#6b706f]">
                 Signed URL valid for 1 hour
               </span>
-              <Button variant="outline" size="sm" onClick={() => setSelectedAsset(null)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedAsset(null)}
+              >
                 Close
               </Button>
             </div>
