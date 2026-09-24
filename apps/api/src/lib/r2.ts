@@ -24,12 +24,36 @@ if (env.R2_ENDPOINT) {
 const r2Client = new S3Client(s3Config);
 
 export const ALLOWED_MIME_TYPES = {
-  "image/jpeg": { kind: "IMAGE" as const, ext: "jpg", maxSize: 20 * 1024 * 1024 },
-  "image/png": { kind: "IMAGE" as const, ext: "png", maxSize: 20 * 1024 * 1024 },
-  "image/webp": { kind: "IMAGE" as const, ext: "webp", maxSize: 20 * 1024 * 1024 },
-  "image/gif": { kind: "IMAGE" as const, ext: "gif", maxSize: 20 * 1024 * 1024 },
-  "video/mp4": { kind: "VIDEO" as const, ext: "mp4", maxSize: 100 * 1024 * 1024 },
-  "video/quicktime": { kind: "VIDEO" as const, ext: "mov", maxSize: 100 * 1024 * 1024 },
+  "image/jpeg": {
+    kind: "IMAGE" as const,
+    ext: "jpg",
+    maxSize: 20 * 1024 * 1024,
+  },
+  "image/png": {
+    kind: "IMAGE" as const,
+    ext: "png",
+    maxSize: 20 * 1024 * 1024,
+  },
+  "image/webp": {
+    kind: "IMAGE" as const,
+    ext: "webp",
+    maxSize: 20 * 1024 * 1024,
+  },
+  "image/gif": {
+    kind: "IMAGE" as const,
+    ext: "gif",
+    maxSize: 20 * 1024 * 1024,
+  },
+  "video/mp4": {
+    kind: "VIDEO" as const,
+    ext: "mp4",
+    maxSize: 100 * 1024 * 1024,
+  },
+  "video/quicktime": {
+    kind: "VIDEO" as const,
+    ext: "mov",
+    maxSize: 100 * 1024 * 1024,
+  },
 } as const;
 
 export type SupportedMimeType = keyof typeof ALLOWED_MIME_TYPES;
@@ -38,7 +62,11 @@ export function isSupportedMimeType(mime: string): mime is SupportedMimeType {
   return mime in ALLOWED_MIME_TYPES;
 }
 
-export function generateObjectKey(workspaceId: string, assetId: string, ext: string): string {
+export function generateObjectKey(
+  workspaceId: string,
+  assetId: string,
+  ext: string,
+): string {
   // Prevent path traversal and arbitrary keys
   const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "");
   return `workspaces/${workspaceId}/media/${assetId}.${safeExt}`;
@@ -71,7 +99,11 @@ export async function createPresignedViewUrl(
   return getSignedUrl(r2Client, command, { expiresIn: expiresInSeconds });
 }
 
-export async function checkObjectExists(objectKey: string): Promise<{ exists: boolean; size?: number | undefined; contentType?: string | undefined }> {
+export async function checkObjectExists(objectKey: string): Promise<{
+  exists: boolean;
+  size?: number | undefined;
+  contentType?: string | undefined;
+}> {
   try {
     const head = await r2Client.send(
       new HeadObjectCommand({

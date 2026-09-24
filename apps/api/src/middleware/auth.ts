@@ -22,7 +22,11 @@ declare global {
   }
 }
 
-export function setSessionCookie(res: Response, token: string, expiresAt: Date) {
+export function setSessionCookie(
+  res: Response,
+  token: string,
+  expiresAt: Date,
+) {
   res.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: env.NODE_ENV === "production",
@@ -52,7 +56,11 @@ export function extractSessionToken(req: Request): string | null {
   return null;
 }
 
-export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
+export async function requireAuth(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const token = extractSessionToken(req);
     if (!token) {

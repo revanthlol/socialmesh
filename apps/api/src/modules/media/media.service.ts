@@ -65,7 +65,11 @@ export class MediaService {
       },
     });
 
-    const uploadUrl = await createPresignedUploadUrl(objectKey, input.mimeType, input.byteSize);
+    const uploadUrl = await createPresignedUploadUrl(
+      objectKey,
+      input.mimeType,
+      input.byteSize,
+    );
 
     return {
       mediaAsset: serializeMediaAsset(asset),
@@ -94,14 +98,17 @@ export class MediaService {
     // Verify object actually landed in R2
     const check = await checkObjectExists(asset.objectKey);
     if (!check.exists) {
-      throw AppError.badRequest("Uploaded file could not be verified in storage. Please re-upload.");
+      throw AppError.badRequest(
+        "Uploaded file could not be verified in storage. Please re-upload.",
+      );
     }
 
     const updated = await prisma.mediaAsset.update({
       where: { id: asset.id },
       data: {
         status: "READY",
-        byteSize: check.size !== undefined ? BigInt(check.size) : asset.byteSize,
+        byteSize:
+          check.size !== undefined ? BigInt(check.size) : asset.byteSize,
       },
     });
 
@@ -109,7 +116,13 @@ export class MediaService {
     return serializeMediaAsset(updated, viewUrl);
   }
 
-  async listMedia(workspaceId: string, options: { kind?: "IMAGE" | "VIDEO" | undefined; limit?: number | undefined }) {
+  async listMedia(
+    workspaceId: string,
+    options: {
+      kind?: "IMAGE" | "VIDEO" | undefined;
+      limit?: number | undefined;
+    },
+  ) {
     const where: any = {
       workspaceId,
       deletedAt: null,

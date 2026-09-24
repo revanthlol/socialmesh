@@ -68,7 +68,10 @@ describe("PostizClient (Adapter Boundary)", () => {
     });
 
     it("returns false on network or connection errors", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
+      );
 
       const result = await client.isConnected();
       expect(result).toBe(false);
@@ -141,12 +144,16 @@ describe("PostizClient (Adapter Boundary)", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           status: 200,
-          json: async () => ({ url: "https://www.linkedin.com/oauth/v2/authorization?client_id=123" }),
+          json: async () => ({
+            url: "https://www.linkedin.com/oauth/v2/authorization?client_id=123",
+          }),
         }),
       );
 
       const url = await client.getConnectUrl("linkedin-page");
-      expect(url).toBe("https://www.linkedin.com/oauth/v2/authorization?client_id=123");
+      expect(url).toBe(
+        "https://www.linkedin.com/oauth/v2/authorization?client_id=123",
+      );
       expect(fetch).toHaveBeenCalledWith(
         "http://localhost:4008/public/v1/social/linkedin-page",
         expect.anything(),
@@ -195,7 +202,10 @@ describe("PostizClient (Adapter Boundary)", () => {
         }),
       );
 
-      const posts = await client.listPosts("2026-10-01T00:00:00Z", "2026-10-02T00:00:00Z");
+      const posts = await client.listPosts(
+        "2026-10-01T00:00:00Z",
+        "2026-10-02T00:00:00Z",
+      );
       expect(posts).toEqual(mockPosts);
       expect(fetch).toHaveBeenCalledWith(
         "http://localhost:4008/public/v1/posts?startDate=2026-10-01T00%3A00%3A00Z&endDate=2026-10-02T00%3A00%3A00Z",
@@ -211,7 +221,11 @@ describe("PostizClient (Adapter Boundary)", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           status: 201,
-          json: async () => ({ id: "post_draft_1", state: "DRAFT", content: "Draft content" }),
+          json: async () => ({
+            id: "post_draft_1",
+            state: "DRAFT",
+            content: "Draft content",
+          }),
         }),
       );
 
@@ -220,7 +234,11 @@ describe("PostizClient (Adapter Boundary)", () => {
         integrations: ["int_1"],
       });
 
-      expect(res).toEqual({ id: "post_draft_1", state: "DRAFT", content: "Draft content" });
+      expect(res).toEqual({
+        id: "post_draft_1",
+        state: "DRAFT",
+        content: "Draft content",
+      });
       expect(fetch).toHaveBeenCalledWith(
         "http://localhost:4008/public/v1/posts",
         expect.objectContaining({
@@ -399,14 +417,20 @@ describe("PostizClient (Adapter Boundary)", () => {
         }),
       );
 
-      const res = await client.uploadFromUrl("https://r2.example.com/socialmesh-media/image.png");
+      const res = await client.uploadFromUrl(
+        "https://r2.example.com/socialmesh-media/image.png",
+      );
       expect(res.id).toBe("media_pz_99");
-      expect(res.path).toBe("https://r2.example.com/socialmesh-media/image.png");
+      expect(res.path).toBe(
+        "https://r2.example.com/socialmesh-media/image.png",
+      );
       expect(fetch).toHaveBeenCalledWith(
         "http://localhost:4008/public/v1/upload-from-url",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ url: "https://r2.example.com/socialmesh-media/image.png" }),
+          body: JSON.stringify({
+            url: "https://r2.example.com/socialmesh-media/image.png",
+          }),
         }),
       );
     });
@@ -423,7 +447,9 @@ describe("PostizClient (Adapter Boundary)", () => {
         }),
       );
 
-      await expect(client.listIntegrations()).rejects.toThrow(PostizAuthenticationError);
+      await expect(client.listIntegrations()).rejects.toThrow(
+        PostizAuthenticationError,
+      );
     });
 
     it("normalizes 404 into PostizNotFoundError", async () => {
@@ -436,7 +462,9 @@ describe("PostizClient (Adapter Boundary)", () => {
         }),
       );
 
-      await expect(client.deletePost("nonexistent_id")).rejects.toThrow(PostizNotFoundError);
+      await expect(client.deletePost("nonexistent_id")).rejects.toThrow(
+        PostizNotFoundError,
+      );
     });
 
     it("normalizes 400/422 into PostizValidationError", async () => {
@@ -449,7 +477,9 @@ describe("PostizClient (Adapter Boundary)", () => {
         }),
       );
 
-      await expect(client.createDraft({})).rejects.toThrow(PostizValidationError);
+      await expect(client.createDraft({})).rejects.toThrow(
+        PostizValidationError,
+      );
     });
 
     it("normalizes 429 into PostizRateLimitError with parsed Retry-After header", async () => {
@@ -497,9 +527,18 @@ describe("PostizClient (Adapter Boundary)", () => {
     });
 
     it("normalizes fetch network failures into PostizNetworkError", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("getaddrinfo ENOTFOUND postiz.internal")));
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockRejectedValue(
+            new Error("getaddrinfo ENOTFOUND postiz.internal"),
+          ),
+      );
 
-      await expect(client.listIntegrations()).rejects.toThrow(PostizNetworkError);
+      await expect(client.listIntegrations()).rejects.toThrow(
+        PostizNetworkError,
+      );
     });
 
     it("fails with PostizValidationError when response fails Zod schema validation", async () => {
@@ -513,7 +552,9 @@ describe("PostizClient (Adapter Boundary)", () => {
         }),
       );
 
-      await expect(client.getConnectUrl("facebook")).rejects.toThrow(PostizValidationError);
+      await expect(client.getConnectUrl("facebook")).rejects.toThrow(
+        PostizValidationError,
+      );
     });
   });
 
@@ -541,7 +582,9 @@ describe("PostizClient (Adapter Boundary)", () => {
         ),
       );
 
-      await expect(slowClient.listIntegrations()).rejects.toThrow(PostizTimeoutError);
+      await expect(slowClient.listIntegrations()).rejects.toThrow(
+        PostizTimeoutError,
+      );
     });
 
     it("respects caller AbortSignal and throws abort error", async () => {
@@ -560,7 +603,9 @@ describe("PostizClient (Adapter Boundary)", () => {
         }),
       );
 
-      const promise = client.listIntegrations({ signal: abortController.signal });
+      const promise = client.listIntegrations({
+        signal: abortController.signal,
+      });
       abortController.abort();
 
       await expect(promise).rejects.toThrow(PostizError);
@@ -590,7 +635,9 @@ describe("PostizClient (Adapter Boundary)", () => {
         apiKey: "",
       });
 
-      await expect(noKeyClient.listIntegrations()).rejects.toThrow(PostizAuthenticationError);
+      await expect(noKeyClient.listIntegrations()).rejects.toThrow(
+        PostizAuthenticationError,
+      );
     });
 
     it("throws PostizValidationError if baseUrl is empty", async () => {
@@ -599,7 +646,9 @@ describe("PostizClient (Adapter Boundary)", () => {
         apiKey: fakeApiKey,
       });
 
-      await expect(noUrlClient.listIntegrations()).rejects.toThrow(PostizValidationError);
+      await expect(noUrlClient.listIntegrations()).rejects.toThrow(
+        PostizValidationError,
+      );
     });
 
     it("isConnected() returns false safely when apiKey or baseUrl is missing without throwing", async () => {
@@ -621,12 +670,16 @@ describe("PostizClient (Adapter Boundary)", () => {
 
       await expect(
         (client as any).request("/api/public/v1/posts", {}),
-      ).rejects.toThrow(/Direct headless Postiz routes must not include \/api prefix/);
+      ).rejects.toThrow(
+        /Direct headless Postiz routes must not include \/api prefix/,
+      );
     });
 
-    it("defaults baseUrl to http://localhost:4008 if not explicitly configured", () => {
+    it("defaults baseUrl from env.POSTIZ_BASE_URL if not explicitly configured", () => {
       const defaultClient = new PostizClient({ apiKey: "key123" });
-      expect((defaultClient as any).baseUrl).toBe("http://localhost:4008");
+      expect((defaultClient as any).baseUrl).toBe(
+        process.env.POSTIZ_BASE_URL || "",
+      );
     });
 
     it("normalizes and strips trailing slashes from baseUrl", () => {
@@ -638,4 +691,3 @@ describe("PostizClient (Adapter Boundary)", () => {
     });
   });
 });
-

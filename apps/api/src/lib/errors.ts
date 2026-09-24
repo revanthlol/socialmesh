@@ -3,7 +3,12 @@ export class AppError extends Error {
   public readonly code: string;
   public readonly details?: unknown;
 
-  constructor(statusCode: number, code: string, message: string, details?: unknown) {
+  constructor(
+    statusCode: number,
+    code: string,
+    message: string,
+    details?: unknown,
+  ) {
     super(message);
     this.name = "AppError";
     this.statusCode = statusCode;
@@ -20,7 +25,9 @@ export class AppError extends Error {
     return new AppError(401, "UNAUTHORIZED", message);
   }
 
-  static forbidden(message = "You do not have permission to perform this action") {
+  static forbidden(
+    message = "You do not have permission to perform this action",
+  ) {
     return new AppError(403, "FORBIDDEN", message);
   }
 

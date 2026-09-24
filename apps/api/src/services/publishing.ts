@@ -47,10 +47,12 @@ export interface EnginePostResult {
   enginePostId: string;
   status: "DRAFT" | "SCHEDULED" | "PUBLISHING" | "PUBLISHED" | "FAILED";
   scheduledFor?: string | undefined;
-  channelResults?: {
-    channelId: string;
-    enginePostId: string;
-  }[] | undefined;
+  channelResults?:
+    | {
+        channelId: string;
+        enginePostId: string;
+      }[]
+    | undefined;
 }
 
 /**
@@ -79,13 +81,31 @@ export interface EngineOptions {
 export interface PublishingEngine {
   isHealthy(options?: EngineOptions): Promise<boolean>;
   listChannels(options?: EngineOptions): Promise<NormalizedChannel[]>;
-  getChannelConnectUrl(provider: string, options?: EngineOptions): Promise<string>;
-  disconnectChannel(channelId: string, options?: EngineOptions): Promise<boolean>;
-  createDraft(input: PublishDraftInput, options?: EngineOptions): Promise<EnginePostResult>;
-  schedulePost(input: SchedulePostInput, options?: EngineOptions): Promise<EnginePostResult>;
-  publishNow(input: PublishNowInput, options?: EngineOptions): Promise<EnginePostResult>;
+  getChannelConnectUrl(
+    provider: string,
+    options?: EngineOptions,
+  ): Promise<string>;
+  disconnectChannel(
+    channelId: string,
+    options?: EngineOptions,
+  ): Promise<boolean>;
+  createDraft(
+    input: PublishDraftInput,
+    options?: EngineOptions,
+  ): Promise<EnginePostResult>;
+  schedulePost(
+    input: SchedulePostInput,
+    options?: EngineOptions,
+  ): Promise<EnginePostResult>;
+  publishNow(
+    input: PublishNowInput,
+    options?: EngineOptions,
+  ): Promise<EnginePostResult>;
   cancelPost(enginePostId: string, options?: EngineOptions): Promise<boolean>;
-  importMedia(mediaUrl: string, options?: EngineOptions): Promise<NormalizedMediaAsset>;
+  importMedia(
+    mediaUrl: string,
+    options?: EngineOptions,
+  ): Promise<NormalizedMediaAsset>;
 }
 
 /**
@@ -109,16 +129,25 @@ export class PostizPublishingEngine implements PublishingEngine {
     }));
   }
 
-  async getChannelConnectUrl(provider: string, options?: EngineOptions): Promise<string> {
+  async getChannelConnectUrl(
+    provider: string,
+    options?: EngineOptions,
+  ): Promise<string> {
     return this.client.getConnectUrl(provider, options);
   }
 
-  async disconnectChannel(channelId: string, options?: EngineOptions): Promise<boolean> {
+  async disconnectChannel(
+    channelId: string,
+    options?: EngineOptions,
+  ): Promise<boolean> {
     const res = await this.client.disconnectIntegration(channelId, options);
     return res.success;
   }
 
-  async createDraft(input: PublishDraftInput, options?: EngineOptions): Promise<EnginePostResult> {
+  async createDraft(
+    input: PublishDraftInput,
+    options?: EngineOptions,
+  ): Promise<EnginePostResult> {
     const res = await this.client.createDraft(
       {
         content: input.content,
@@ -131,8 +160,14 @@ export class PostizPublishingEngine implements PublishingEngine {
     return this.normalizePostResult(res, "DRAFT");
   }
 
-  async schedulePost(input: SchedulePostInput, options?: EngineOptions): Promise<EnginePostResult> {
-    const dateStr = input.scheduledAt instanceof Date ? input.scheduledAt.toISOString() : input.scheduledAt;
+  async schedulePost(
+    input: SchedulePostInput,
+    options?: EngineOptions,
+  ): Promise<EnginePostResult> {
+    const dateStr =
+      input.scheduledAt instanceof Date
+        ? input.scheduledAt.toISOString()
+        : input.scheduledAt;
     const res = await this.client.schedulePost(
       {
         content: input.content,
@@ -146,7 +181,10 @@ export class PostizPublishingEngine implements PublishingEngine {
     return this.normalizePostResult(res, "SCHEDULED", dateStr);
   }
 
-  async publishNow(input: PublishNowInput, options?: EngineOptions): Promise<EnginePostResult> {
+  async publishNow(
+    input: PublishNowInput,
+    options?: EngineOptions,
+  ): Promise<EnginePostResult> {
     const res = await this.client.publishNow(
       {
         content: input.content,
@@ -159,12 +197,18 @@ export class PostizPublishingEngine implements PublishingEngine {
     return this.normalizePostResult(res, "PUBLISHING");
   }
 
-  async cancelPost(enginePostId: string, options?: EngineOptions): Promise<boolean> {
+  async cancelPost(
+    enginePostId: string,
+    options?: EngineOptions,
+  ): Promise<boolean> {
     const res = await this.client.deletePost(enginePostId, options);
     return res.success;
   }
 
-  async importMedia(mediaUrl: string, options?: EngineOptions): Promise<NormalizedMediaAsset> {
+  async importMedia(
+    mediaUrl: string,
+    options?: EngineOptions,
+  ): Promise<NormalizedMediaAsset> {
     const res = await this.client.uploadFromUrl(mediaUrl, options);
     return {
       id: res.id,
@@ -183,7 +227,10 @@ export class PostizPublishingEngine implements PublishingEngine {
       const first = raw[0];
       const enginePostId = first?.postId ?? first?.id ?? "unknown";
       const channelResults = raw.map((item) => ({
-        channelId: typeof item.integration === "string" ? item.integration : (item.integration as any)?.id ?? "unknown",
+        channelId:
+          typeof item.integration === "string"
+            ? item.integration
+            : ((item.integration as any)?.id ?? "unknown"),
         enginePostId: item.postId ?? item.id ?? enginePostId,
       }));
 

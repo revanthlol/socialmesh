@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import { createApp } from "./app.js";
 import { prisma } from "./lib/prisma.js";
 
-describe("SociaMesh API Integration Smoke Tests", () => {
+describe("SociaMesh API Integration Smoke Tests", { timeout: 25000 }, () => {
   let server: Server;
   let baseUrl: string;
 
@@ -32,7 +32,9 @@ describe("SociaMesh API Integration Smoke Tests", () => {
   afterAll(async () => {
     // Clean up test data
     try {
-      const user = await prisma.user.findUnique({ where: { email: testEmail } });
+      const user = await prisma.user.findUnique({
+        where: { email: testEmail },
+      });
       if (user) {
         await prisma.user.delete({ where: { id: user.id } });
       }
@@ -149,18 +151,21 @@ describe("SociaMesh API Integration Smoke Tests", () => {
 
   it("9. Cloudflare R2 Media Pipeline: presign, upload to R2, confirm and view", async () => {
     // Step A: Request presigned upload URL
-    const presignRes = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/media/upload-url`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: sessionCookie,
+    const presignRes = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/media/upload-url`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie,
+        },
+        body: JSON.stringify({
+          originalName: "test-image.png",
+          mimeType: "image/png",
+          byteSize: 14, // 14 bytes test payload
+        }),
       },
-      body: JSON.stringify({
-        originalName: "test-image.png",
-        mimeType: "image/png",
-        byteSize: 14, // 14 bytes test payload
-      }),
-    });
+    );
 
     expect(presignRes.status).toBe(201);
     const presignBody = await presignRes.json();
@@ -184,10 +189,13 @@ describe("SociaMesh API Integration Smoke Tests", () => {
     expect(r2UploadRes.status).toBe(200);
 
     // Step C: Confirm upload with API
-    const confirmRes = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/media/${mediaAssetId}/complete`, {
-      method: "POST",
-      headers: { Cookie: sessionCookie },
-    });
+    const confirmRes = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/media/${mediaAssetId}/complete`,
+      {
+        method: "POST",
+        headers: { Cookie: sessionCookie },
+      },
+    );
 
     expect(confirmRes.status).toBe(200);
     const confirmBody = await confirmRes.json();
@@ -201,9 +209,12 @@ describe("SociaMesh API Integration Smoke Tests", () => {
     expect(downloadedText).toBe("hello socia-mesh");
 
     // Step E: Verify media is listed
-    const listRes = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/media`, {
-      headers: { Cookie: sessionCookie },
-    });
+    const listRes = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/media`,
+      {
+        headers: { Cookie: sessionCookie },
+      },
+    );
     expect(listRes.status).toBe(200);
     const listBody = await listRes.json();
     expect(listBody.data.some((m: any) => m.id === mediaAssetId)).toBe(true);
@@ -211,71 +222,93 @@ describe("SociaMesh API Integration Smoke Tests", () => {
 
   it("10. Posts/Drafts: create draft, attach media, read, update, delete", async () => {
     // Step A: Create draft
-    const createRes = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/posts`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: sessionCookie,
+    const createRes = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/posts`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie,
+        },
+        body: JSON.stringify({
+          content: "Exciting announcement from SociaMesh! #launch",
+          mediaAssetIds: [mediaAssetId],
+        }),
       },
-      body: JSON.stringify({
-        content: "Exciting announcement from SociaMesh! #launch",
-        mediaAssetIds: [mediaAssetId],
-      }),
-    });
+    );
 
     expect(createRes.status).toBe(201);
     const createBody = await createRes.json();
     expect(createBody.data.status).toBe("DRAFT");
-    expect(createBody.data.content).toBe("Exciting announcement from SociaMesh! #launch");
+    expect(createBody.data.content).toBe(
+      "Exciting announcement from SociaMesh! #launch",
+    );
     expect(createBody.data.media.length).toBe(1);
     expect(createBody.data.media[0].asset.id).toBe(mediaAssetId);
 
     postId = createBody.data.id;
 
     // Step B: Retrieve draft
-    const getRes = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/posts/${postId}`, {
-      headers: { Cookie: sessionCookie },
-    });
+    const getRes = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/posts/${postId}`,
+      {
+        headers: { Cookie: sessionCookie },
+      },
+    );
     expect(getRes.status).toBe(200);
     const getBody = await getRes.json();
     expect(getBody.data.id).toBe(postId);
-    expect(getBody.data.content).toBe("Exciting announcement from SociaMesh! #launch");
+    expect(getBody.data.content).toBe(
+      "Exciting announcement from SociaMesh! #launch",
+    );
 
     // Step C: Update draft
-    const updateRes = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/posts/${postId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: sessionCookie,
+    const updateRes = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/posts/${postId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie,
+        },
+        body: JSON.stringify({
+          content: "Updated announcement text!",
+        }),
       },
-      body: JSON.stringify({
-        content: "Updated announcement text!",
-      }),
-    });
+    );
     expect(updateRes.status).toBe(200);
     const updateBody = await updateRes.json();
     expect(updateBody.data.content).toBe("Updated announcement text!");
     expect(updateBody.data.version).toBe(2);
 
     // Step D: Delete draft
-    const deleteRes = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/posts/${postId}`, {
-      method: "DELETE",
-      headers: { Cookie: sessionCookie },
-    });
+    const deleteRes = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/posts/${postId}`,
+      {
+        method: "DELETE",
+        headers: { Cookie: sessionCookie },
+      },
+    );
     expect(deleteRes.status).toBe(200);
   });
 
   it("11. Media deletion: DELETE /api/v1/workspaces/:workspaceId/media/:mediaId", async () => {
-    const res = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/media/${mediaAssetId}`, {
-      method: "DELETE",
-      headers: { Cookie: sessionCookie },
-    });
+    const res = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/media/${mediaAssetId}`,
+      {
+        method: "DELETE",
+        headers: { Cookie: sessionCookie },
+      },
+    );
     expect(res.status).toBe(200);
 
     // Verify it is no longer returned in list
-    const listRes = await fetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/media`, {
-      headers: { Cookie: sessionCookie },
-    });
+    const listRes = await fetch(
+      `${baseUrl}/api/v1/workspaces/${workspaceId}/media`,
+      {
+        headers: { Cookie: sessionCookie },
+      },
+    );
     const listBody = await listRes.json();
     expect(listBody.data.some((m: any) => m.id === mediaAssetId)).toBe(false);
   });

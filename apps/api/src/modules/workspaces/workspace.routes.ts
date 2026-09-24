@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { workspaceController } from "./workspace.controller.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { requireWorkspaceMember, requireWorkspaceRole } from "../../middleware/workspace.js";
+import {
+  requireWorkspaceMember,
+  requireWorkspaceRole,
+} from "../../middleware/workspace.js";
 import { validate } from "../../middleware/validate.js";
 import {
   createWorkspaceSchema,
@@ -10,6 +13,7 @@ import {
 } from "./workspace.schemas.js";
 import { mediaRouter } from "../media/media.routes.js";
 import { postsRouter } from "../posts/posts.routes.js";
+import { channelsRouter } from "../channels/channels.routes.js";
 
 const router = Router();
 
@@ -17,7 +21,11 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/", workspaceController.list);
-router.post("/", validate({ body: createWorkspaceSchema }), workspaceController.create);
+router.post(
+  "/",
+  validate({ body: createWorkspaceSchema }),
+  workspaceController.create,
+);
 
 router.get(
   "/:workspaceId",
@@ -41,8 +49,9 @@ router.get(
   workspaceController.listMembers,
 );
 
-// Mount workspace-scoped media and posts routes
+// Mount workspace-scoped media, posts, and channels routes
 router.use("/:workspaceId/media", requireWorkspaceMember(), mediaRouter);
 router.use("/:workspaceId/posts", requireWorkspaceMember(), postsRouter);
+router.use("/:workspaceId/channels", requireWorkspaceMember(), channelsRouter);
 
 export { router as workspaceRouter };

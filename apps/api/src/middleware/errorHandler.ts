@@ -1,4 +1,9 @@
-import type { Request, Response, NextFunction, ErrorRequestHandler } from "express";
+import type {
+  Request,
+  Response,
+  NextFunction,
+  ErrorRequestHandler,
+} from "express";
 import { AppError } from "../lib/errors.js";
 
 export const errorHandler: ErrorRequestHandler = (
@@ -7,7 +12,8 @@ export const errorHandler: ErrorRequestHandler = (
   res: Response,
   _next: NextFunction,
 ): void => {
-  const requestId = (req as any).id || (req.headers["x-request-id"] as string | undefined);
+  const requestId =
+    (req as any).id || (req.headers["x-request-id"] as string | undefined);
 
   if (err instanceof AppError) {
     if (err.statusCode >= 500) {
@@ -25,7 +31,12 @@ export const errorHandler: ErrorRequestHandler = (
   }
 
   // Handle SyntaxError from malformed JSON body
-  if (err instanceof SyntaxError && "status" in err && (err as any).status === 400 && "body" in err) {
+  if (
+    err instanceof SyntaxError &&
+    "status" in err &&
+    (err as any).status === 400 &&
+    "body" in err
+  ) {
     res.status(400).json({
       error: {
         code: "INVALID_JSON",

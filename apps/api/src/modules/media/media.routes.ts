@@ -9,10 +9,30 @@ import {
 
 const router = Router({ mergeParams: true });
 
-router.get("/", validate({ query: listMediaQuerySchema }), mediaController.list);
-router.post("/upload-url", validate({ body: requestUploadUrlSchema }), mediaController.requestUploadUrl);
-router.get("/:mediaId", validate({ params: mediaParamSchema }), mediaController.getOne);
-router.post("/:mediaId/complete", validate({ params: mediaParamSchema }), mediaController.confirmUpload);
-router.delete("/:mediaId", validate({ params: mediaParamSchema }), mediaController.delete);
+router.get(
+  "/",
+  validate({ query: listMediaQuerySchema }),
+  mediaController.list,
+);
+router.post(
+  "/upload-url",
+  validate({ body: requestUploadUrlSchema }),
+  mediaController.requestUploadUrl,
+);
+router.get(
+  "/:mediaId",
+  validate({ params: mediaParamSchema }),
+  mediaController.getOne,
+);
+router.post(
+  "/:mediaId/complete",
+  validate({ params: mediaParamSchema }),
+  mediaController.confirmUpload,
+);
+router.delete(
+  "/:mediaId",
+  validate({ params: mediaParamSchema }),
+  mediaController.delete,
+);
 
 export { router as mediaRouter };

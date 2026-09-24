@@ -1,9 +1,16 @@
 import { z } from "zod";
 
 export const requestUploadUrlSchema = z.object({
-  originalName: z.string().trim().min(1, "Original filename is required").max(255),
+  originalName: z
+    .string()
+    .trim()
+    .min(1, "Original filename is required")
+    .max(255),
   mimeType: z.string().trim().min(1, "MIME type is required"),
-  byteSize: z.coerce.number().int().positive("File size must be greater than zero"),
+  byteSize: z.coerce
+    .number()
+    .int()
+    .positive("File size must be greater than zero"),
 });
 
 export const mediaParamSchema = z.object({

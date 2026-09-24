@@ -25,7 +25,11 @@ declare global {
 }
 
 export function requireWorkspaceMember(paramName = "workspaceId") {
-  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+  return async (
+    req: Request,
+    _res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
     try {
       if (!req.user) {
         throw AppError.unauthorized();
@@ -79,7 +83,11 @@ export function requireWorkspaceRole(allowedRoles: WorkspaceRole[]) {
     }
 
     if (!allowedRoles.includes(req.membership.role)) {
-      next(AppError.forbidden(`This action requires one of the following roles: ${allowedRoles.join(", ")}`));
+      next(
+        AppError.forbidden(
+          `This action requires one of the following roles: ${allowedRoles.join(", ")}`,
+        ),
+      );
       return;
     }
 
