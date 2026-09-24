@@ -9,6 +9,7 @@ import { MediaPage } from "./pages/MediaPage.js";
 import { PostsPage } from "./pages/PostsPage.js";
 import { CalendarPage } from "./pages/CalendarPage.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
+import { OAuthCallbackPage } from "./pages/OAuthCallbackPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 
 export function App() {
@@ -17,6 +18,9 @@ export function App() {
       {/* Public Authentication Routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+
+      {/* Static OAuth Callback Route (single Postiz FRONTEND_URL target) */}
+      <Route path="/accounts/callback" element={<OAuthCallbackPage />} />
 
       {/* Authenticated Workspace Redirect */}
       <Route path="/app" element={<WorkspaceRedirect />} />
@@ -29,6 +33,7 @@ export function App() {
         <Route path="posts" element={<PostsPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="accounts" element={<AccountsPage />} />
+        <Route path="accounts/callback" element={<OAuthCallbackPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 

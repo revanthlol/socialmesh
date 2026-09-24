@@ -47,7 +47,55 @@ export interface MediaAsset {
   viewUrl: string | null;
 }
 
-export type PostStatus = "DRAFT" | "SCHEDULED" | "PUBLISHING" | "PUBLISHED" | "FAILED";
+export type PostStatus =
+  | "DRAFT"
+  | "SCHEDULED"
+  | "PROCESSING"
+  | "PUBLISHING"
+  | "PUBLISHED"
+  | "FAILED"
+  | "CANCELLED"
+  | "PARTIAL";
+
+export interface WorkspaceChannel {
+  id: string;
+  workspaceId: string;
+  postizIntegrationId: string;
+  provider: string;
+  name: string;
+  pictureUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AvailableChannel {
+  id: string; // postizIntegrationId
+  provider: string;
+  name: string;
+  pictureUrl?: string | null;
+  isActive: boolean;
+  isAssignedToCurrent: boolean;
+  isAssignedToOther: boolean;
+  assignedWorkspacesCount: number;
+}
+
+export interface PostTargetItem {
+  id: string;
+  channelId: string | null;
+  postizPostId?: string | null;
+  status: PostStatus;
+  scheduledFor?: string | null;
+  publishedAt?: string | null;
+  lastError?: string | null;
+  lastErrorCode?: string | null;
+  channel?: {
+    id: string;
+    postizIntegrationId: string;
+    provider: string;
+    name: string;
+    pictureUrl?: string | null;
+  } | null;
+}
 
 export interface PostMediaItem {
   position: number;
@@ -73,6 +121,13 @@ export interface Post {
     email: string;
   } | null;
   media: PostMediaItem[];
+  targets: PostTargetItem[];
+}
+
+export interface PublishingStatus {
+  isConnected: boolean;
+  latencyMs?: number;
+  message: string;
 }
 
 export interface ApiError {

@@ -7,7 +7,12 @@ export interface EmptyStateProps {
   action?: ReactNode;
 }
 
-export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+}: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center p-8 md:p-12 text-center rounded border border-dashed border-[#c9c5bb] bg-[#faf9f5]">
       {icon && <div className="text-[#6b706f] mb-3">{icon}</div>}

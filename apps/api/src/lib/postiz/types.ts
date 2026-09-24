@@ -5,7 +5,7 @@ import { z } from "zod";
  */
 export interface PostizConfig {
   /**
-   * Base URL for the Postiz backend service (e.g. "http://localhost:3000").
+   * Base URL for the Postiz backend service (e.g. from POSTIZ_BASE_URL).
    */
   baseUrl: string;
 
@@ -46,7 +46,9 @@ export const PostizIsConnectedResponseSchema = z.union([
   }),
   z.boolean(),
 ]);
-export type PostizIsConnectedResponse = z.infer<typeof PostizIsConnectedResponseSchema>;
+export type PostizIsConnectedResponse = z.infer<
+  typeof PostizIsConnectedResponseSchema
+>;
 
 export const PostizIntegrationSchema = z.object({
   id: z.string(),
@@ -60,13 +62,19 @@ export const PostizIntegrationSchema = z.object({
 });
 export type PostizIntegration = z.infer<typeof PostizIntegrationSchema>;
 
-export const PostizListIntegrationsResponseSchema = z.array(PostizIntegrationSchema);
-export type PostizListIntegrationsResponse = z.infer<typeof PostizListIntegrationsResponseSchema>;
+export const PostizListIntegrationsResponseSchema = z.array(
+  PostizIntegrationSchema,
+);
+export type PostizListIntegrationsResponse = z.infer<
+  typeof PostizListIntegrationsResponseSchema
+>;
 
 export const PostizConnectUrlResponseSchema = z.object({
   url: z.string().url(),
 });
-export type PostizConnectUrlResponse = z.infer<typeof PostizConnectUrlResponseSchema>;
+export type PostizConnectUrlResponse = z.infer<
+  typeof PostizConnectUrlResponseSchema
+>;
 
 export const PostizSuccessResponseSchema = z.object({
   success: z.boolean().optional(),
@@ -93,17 +101,23 @@ export type PostizPost = z.infer<typeof PostizPostSchema>;
 
 export const PostizListPostsResponseSchema = z.union([
   z.array(PostizPostSchema),
-  z.object({
-    posts: z.array(PostizPostSchema),
-  }).transform((val) => val.posts),
+  z
+    .object({
+      posts: z.array(PostizPostSchema),
+    })
+    .transform((val) => val.posts),
 ]);
-export type PostizListPostsResponse = z.infer<typeof PostizListPostsResponseSchema>;
+export type PostizListPostsResponse = z.infer<
+  typeof PostizListPostsResponseSchema
+>;
 
 export const PostizCreatePostResponseSchema = z.union([
   z.array(PostizPostSchema),
   PostizPostSchema,
 ]);
-export type PostizCreatePostResponse = z.infer<typeof PostizCreatePostResponseSchema>;
+export type PostizCreatePostResponse = z.infer<
+  typeof PostizCreatePostResponseSchema
+>;
 
 export const PostizUploadFromUrlResponseSchema = z.object({
   id: z.string(),
@@ -111,7 +125,9 @@ export const PostizUploadFromUrlResponseSchema = z.object({
   name: z.string().optional(),
   mimeType: z.string().optional(),
 });
-export type PostizUploadFromUrlResponse = z.infer<typeof PostizUploadFromUrlResponseSchema>;
+export type PostizUploadFromUrlResponse = z.infer<
+  typeof PostizUploadFromUrlResponseSchema
+>;
 
 // ==========================================
 // INPUT TYPES FOR POSTIZ MUTATIONS

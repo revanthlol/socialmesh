@@ -45,8 +45,10 @@ const defaultLogger = pino({
 export const POSTIZ_DIRECT_ENDPOINTS = {
   isConnected: "/public/v1/is-connected",
   integrations: "/public/v1/integrations",
-  social: (provider: string) => `/public/v1/social/${encodeURIComponent(provider)}`,
-  integrationById: (id: string) => `/public/v1/integrations/${encodeURIComponent(id)}`,
+  social: (provider: string) =>
+    `/public/v1/social/${encodeURIComponent(provider)}`,
+  integrationById: (id: string) =>
+    `/public/v1/integrations/${encodeURIComponent(id)}`,
   posts: "/public/v1/posts",
   postById: (id: string) => `/public/v1/posts/${encodeURIComponent(id)}`,
   uploadFromUrl: "/public/v1/upload-from-url",
@@ -64,7 +66,10 @@ export class PostizClient {
   private readonly logger: pino.Logger;
 
   constructor(config: Partial<PostizConfig> = {}, logger?: pino.Logger) {
-    this.baseUrl = (config.baseUrl ?? env.POSTIZ_BASE_URL ?? "http://localhost:4008").replace(/\/+$/, "");
+    this.baseUrl = (config.baseUrl ?? env.POSTIZ_BASE_URL ?? "").replace(
+      /\/+$/,
+      "",
+    );
     this.apiKey = config.apiKey ?? env.POSTIZ_API_KEY ?? "";
     this.timeoutMs = config.timeoutMs ?? env.POSTIZ_TIMEOUT_MS ?? 10000;
     this.organizationId = config.organizationId;
@@ -76,7 +81,11 @@ export class PostizClient {
    */
   private buildPostPayload(
     type: "draft" | "schedule" | "now",
-    input: (PostizCreateDraftInput | PostizSchedulePostInput | PostizPublishNowInput) & { date?: string | undefined },
+    input: (
+      | PostizCreateDraftInput
+      | PostizSchedulePostInput
+      | PostizPublishNowInput
+    ) & { date?: string | undefined },
   ): Record<string, unknown> {
     const raw = input as any;
     if (Array.isArray(raw.posts)) {
@@ -91,7 +100,10 @@ export class PostizClient {
 
     const mappedPosts = (input.integrations || []).map((item) => {
       const integrationId = typeof item === "string" ? item : item.id;
-      const customContent = typeof item === "object" && item.customContent ? item.customContent : input.content ?? "";
+      const customContent =
+        typeof item === "object" && item.customContent
+          ? item.customContent
+          : (input.content ?? "");
       return {
         integration: { id: integrationId },
         value: [{ content: customContent, image: [] }],
@@ -122,17 +134,23 @@ export class PostizClient {
     schema?: ZodType<T>,
   ): Promise<T> {
     if (!this.baseUrl) {
-      throw new PostizValidationError("Postiz base URL is not configured. Set POSTIZ_BASE_URL.");
+      throw new PostizValidationError(
+        "Postiz base URL is not configured. Set POSTIZ_BASE_URL.",
+      );
     }
     if (!this.apiKey) {
-      throw new PostizAuthenticationError("Postiz API key is not configured. Set POSTIZ_API_KEY.");
+      throw new PostizAuthenticationError(
+        "Postiz API key is not configured. Set POSTIZ_API_KEY.",
+      );
     }
 
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
 
     // Safeguard against accidental /api prefix
     if (cleanPath.startsWith("/api/")) {
-      throw new PostizValidationError(`Direct headless Postiz routes must not include /api prefix: ${cleanPath}`);
+      throw new PostizValidationError(
+        `Direct headless Postiz routes must not include /api prefix: ${cleanPath}`,
+      );
     }
 
     const url = `${this.baseUrl}${cleanPath}`;
@@ -147,7 +165,11 @@ export class PostizClient {
       ...(init.headers as Record<string, string>),
     };
 
-    if (init.body && typeof init.body === "string" && !headers["Content-Type"]) {
+    if (
+      init.body &&
+      typeof init.body === "string" &&
+      !headers["Content-Type"]
+    ) {
       headers["Content-Type"] = "application/json";
     }
 
@@ -214,14 +236,21 @@ export class PostizClient {
         }
 
         const message =
-          (typeof errorBody === "object" && errorBody !== null && "message" in errorBody
+          (typeof errorBody === "object" &&
+          errorBody !== null &&
+          "message" in errorBody
             ? Array.isArray((errorBody as { message: unknown }).message)
               ? (errorBody as { message: unknown[] }).message.join(", ")
               : String((errorBody as { message: unknown }).message)
-            : undefined) ?? `Postiz API responded with status ${response.status}`;
+            : undefined) ??
+          `Postiz API responded with status ${response.status}`;
 
         if (response.status === 401 || response.status === 403) {
-          throw new PostizAuthenticationError(message, response.status, errorBody);
+          throw new PostizAuthenticationError(
+            message,
+            response.status,
+            errorBody,
+          );
         }
 
         if (response.status === 404) {
@@ -234,8 +263,14 @@ export class PostizClient {
 
         if (response.status === 429) {
           const retryHeader = response.headers.get("Retry-After");
-          const retryAfter = retryHeader ? Number.parseInt(retryHeader, 10) : undefined;
-          throw new PostizRateLimitError(message, Number.isNaN(retryAfter) ? undefined : retryAfter, errorBody);
+          const retryAfter = retryHeader
+            ? Number.parseInt(retryHeader, 10)
+            : undefined;
+          throw new PostizRateLimitError(
+            message,
+            Number.isNaN(retryAfter) ? undefined : retryAfter,
+            errorBody,
+          );
         }
 
         if (response.status >= 500) {
@@ -293,7 +328,10 @@ export class PostizClient {
         throw new PostizTimeoutError(timeoutMs, cleanPath);
       }
 
-      throw new PostizNetworkError(err instanceof Error ? err.message : String(err), err);
+      throw new PostizNetworkError(
+        err instanceof Error ? err.message : String(err),
+        err,
+      );
     } finally {
       if (options?.signal) {
         options.signal.removeEventListener("abort", onCallerAbort);
@@ -326,7 +364,9 @@ export class PostizClient {
   /**
    * List all connected social channels/integrations for the organization.
    */
-  async listIntegrations(options?: PostizRequestOptions): Promise<PostizIntegration[]> {
+  async listIntegrations(
+    options?: PostizRequestOptions,
+  ): Promise<PostizIntegration[]> {
     return this.request(
       POSTIZ_DIRECT_ENDPOINTS.integrations,
       { method: "GET" },
@@ -339,7 +379,10 @@ export class PostizClient {
    * Initiate OAuth connection for a social provider.
    * Returns the external provider authorization URL.
    */
-  async getConnectUrl(provider: string, options?: PostizRequestOptions): Promise<string> {
+  async getConnectUrl(
+    provider: string,
+    options?: PostizRequestOptions,
+  ): Promise<string> {
     const data = await this.request(
       POSTIZ_DIRECT_ENDPOINTS.social(provider),
       { method: "GET" },
@@ -352,7 +395,10 @@ export class PostizClient {
   /**
    * Disconnect an active integration by its ID.
    */
-  async disconnectIntegration(id: string, options?: PostizRequestOptions): Promise<{ success: boolean }> {
+  async disconnectIntegration(
+    id: string,
+    options?: PostizRequestOptions,
+  ): Promise<{ success: boolean }> {
     const res = await this.request(
       POSTIZ_DIRECT_ENDPOINTS.integrationById(id),
       { method: "DELETE" },
@@ -366,7 +412,11 @@ export class PostizClient {
   /**
    * List scheduled/published posts within a date range.
    */
-  async listPosts(startDate: string, endDate: string, options?: PostizRequestOptions): Promise<PostizPost[]> {
+  async listPosts(
+    startDate: string,
+    endDate: string,
+    options?: PostizRequestOptions,
+  ): Promise<PostizPost[]> {
     const query = new URLSearchParams({ startDate, endDate }).toString();
     const result = await this.request(
       `${POSTIZ_DIRECT_ENDPOINTS.posts}?${query}`,
@@ -374,7 +424,9 @@ export class PostizClient {
       options,
       PostizListPostsResponseSchema,
     );
-    return Array.isArray(result) ? result : (result as { posts: PostizPost[] }).posts ?? [];
+    return Array.isArray(result)
+      ? result
+      : ((result as { posts: PostizPost[] }).posts ?? []);
   }
 
   /**
@@ -437,7 +489,10 @@ export class PostizClient {
   /**
    * Cancel and delete a post in Postiz. Terminates running Temporal workflows.
    */
-  async deletePost(id: string, options?: PostizRequestOptions): Promise<{ success: boolean }> {
+  async deletePost(
+    id: string,
+    options?: PostizRequestOptions,
+  ): Promise<{ success: boolean }> {
     const res = await this.request(
       POSTIZ_DIRECT_ENDPOINTS.postById(id),
       { method: "DELETE" },
@@ -454,7 +509,10 @@ export class PostizClient {
   /**
    * Ingest a media asset from a URL into Postiz.
    */
-  async uploadFromUrl(url: string, options?: PostizRequestOptions): Promise<PostizUploadFromUrlResponse> {
+  async uploadFromUrl(
+    url: string,
+    options?: PostizRequestOptions,
+  ): Promise<PostizUploadFromUrlResponse> {
     return this.request(
       POSTIZ_DIRECT_ENDPOINTS.uploadFromUrl,
       {
@@ -470,6 +528,8 @@ export class PostizClient {
 /**
  * Factory helper to instantiate a configured Postiz client.
  */
-export function getPostizClient(overrides?: Partial<PostizConfig>): PostizClient {
+export function getPostizClient(
+  overrides?: Partial<PostizConfig>,
+): PostizClient {
   return new PostizClient(overrides);
 }

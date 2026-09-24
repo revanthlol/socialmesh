@@ -16,7 +16,10 @@ export function hashIp(ip?: string): string | null {
 }
 
 export class AuthService {
-  async register(input: RegisterInput, meta?: { userAgent?: string; ip?: string }) {
+  async register(
+    input: RegisterInput,
+    meta?: { userAgent?: string; ip?: string },
+  ) {
     const normalizedEmail = input.email.trim().toLowerCase();
 
     const existing = await prisma.user.findUnique({
@@ -24,7 +27,9 @@ export class AuthService {
     });
 
     if (existing) {
-      throw AppError.conflict("An account with this email address already exists");
+      throw AppError.conflict(
+        "An account with this email address already exists",
+      );
     }
 
     const passwordHash = await argon2.hash(input.password, {
@@ -38,7 +43,8 @@ export class AuthService {
     const tokenHash = hashToken(sessionToken);
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
-    const workspaceName = input.workspaceName?.trim() || `${input.displayName.trim()}'s Workspace`;
+    const workspaceName =
+      input.workspaceName?.trim() || `${input.displayName.trim()}'s Workspace`;
 
     // Execute user, workspace, membership, and initial session creation atomically
     const result = await prisma.$transaction(async (tx) => {
@@ -115,7 +121,10 @@ export class AuthService {
       throw AppError.unauthorized("Invalid email or password");
     }
 
-    const validPassword = await argon2.verify(user.passwordHash, input.password);
+    const validPassword = await argon2.verify(
+      user.passwordHash,
+      input.password,
+    );
     if (!validPassword) {
       throw AppError.unauthorized("Invalid email or password");
     }
@@ -176,17 +185,21 @@ export class AuthService {
     if (!session || session.expiresAt < new Date()) {
       if (session) {
         // Clean up expired session
-        await prisma.session.delete({ where: { id: session.id } }).catch(() => null);
+        await prisma.session
+          .delete({ where: { id: session.id } })
+          .catch(() => null);
       }
       return null;
     }
 
     // Touch lastSeenAt periodically if older than 5 minutes
     if (Date.now() - session.lastSeenAt.getTime() > 5 * 60 * 1000) {
-      await prisma.session.update({
-        where: { id: session.id },
-        data: { lastSeenAt: new Date() },
-      }).catch(() => null);
+      await prisma.session
+        .update({
+          where: { id: session.id },
+          data: { lastSeenAt: new Date() },
+        })
+        .catch(() => null);
     }
 
     return session;

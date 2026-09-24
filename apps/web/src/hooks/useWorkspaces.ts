@@ -68,7 +68,9 @@ export function useWorkspaceMembers(workspaceId?: string) {
     queryKey: ["workspaces", workspaceId, "members"],
     queryFn: async () => {
       if (!workspaceId) return [];
-      return await api.get<WorkspaceMember[]>(`/workspaces/${workspaceId}/members`);
+      return await api.get<WorkspaceMember[]>(
+        `/workspaces/${workspaceId}/members`,
+      );
     },
     enabled: !!workspaceId,
   });

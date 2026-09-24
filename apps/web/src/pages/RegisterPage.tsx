@@ -31,7 +31,9 @@ export function RegisterPage() {
         navigate("/app");
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "Failed to register. Please check your information.");
+      setErrorMessage(
+        err.message || "Failed to register. Please check your information.",
+      );
     }
   }
 
@@ -42,7 +44,9 @@ export function RegisterPage() {
           <p className="text-[11px] font-mono font-bold tracking-widest text-[#b23a24] uppercase">
             SociaMesh Onboarding
           </p>
-          <h1 className="text-2xl font-serif font-semibold text-[#161a1d] mt-1">Create Account</h1>
+          <h1 className="text-2xl font-serif font-semibold text-[#161a1d] mt-1">
+            Create Account
+          </h1>
           <p className="text-xs text-[#6b706f] mt-1">
             Set up your organization workspace and owner account.
           </p>
@@ -94,14 +98,21 @@ export function RegisterPage() {
             placeholder="Min 8 characters"
           />
 
-          <Button type="submit" className="w-full mt-2" isLoading={isRegistering}>
+          <Button
+            type="submit"
+            className="w-full mt-2"
+            isLoading={isRegistering}
+          >
             Register & Continue
           </Button>
         </form>
 
         <div className="mt-6 pt-4 border-t border-[#c9c5bb] text-center text-xs text-[#6b706f]">
           Already have an account?{" "}
-          <Link to="/login" className="font-semibold text-[#161a1d] underline hover:text-[#b23a24]">
+          <Link
+            to="/login"
+            className="font-semibold text-[#161a1d] underline hover:text-[#b23a24]"
+          >
             Sign In
           </Link>
         </div>

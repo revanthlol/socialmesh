@@ -6,7 +6,12 @@ export const createWorkspaceSchema = z.object({
 });
 
 export const updateWorkspaceSchema = z.object({
-  name: z.string().trim().min(1, "Workspace name cannot be empty").max(100).optional(),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Workspace name cannot be empty")
+    .max(100)
+    .optional(),
   timezone: z.string().trim().min(1).max(50).optional(),
 });
 

@@ -59,17 +59,27 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
   });
 
   it("getChannelConnectUrl() returns authorization URL", async () => {
-    vi.spyOn(mockClient, "getConnectUrl").mockResolvedValue("https://oauth.provider.com/auth");
+    vi.spyOn(mockClient, "getConnectUrl").mockResolvedValue(
+      "https://oauth.provider.com/auth",
+    );
     const url = await engine.getChannelConnectUrl("facebook");
     expect(url).toBe("https://oauth.provider.com/auth");
-    expect(mockClient.getConnectUrl).toHaveBeenCalledWith("facebook", undefined);
+    expect(mockClient.getConnectUrl).toHaveBeenCalledWith(
+      "facebook",
+      undefined,
+    );
   });
 
   it("disconnectChannel() returns boolean success", async () => {
-    vi.spyOn(mockClient, "disconnectIntegration").mockResolvedValue({ success: true });
+    vi.spyOn(mockClient, "disconnectIntegration").mockResolvedValue({
+      success: true,
+    });
     const ok = await engine.disconnectChannel("int_fb_1");
     expect(ok).toBe(true);
-    expect(mockClient.disconnectIntegration).toHaveBeenCalledWith("int_fb_1", undefined);
+    expect(mockClient.disconnectIntegration).toHaveBeenCalledWith(
+      "int_fb_1",
+      undefined,
+    );
   });
 
   it("createDraft() normalizes Postiz draft creation response", async () => {
@@ -86,9 +96,7 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
       enginePostId: "pz_post_101",
       status: "DRAFT",
       scheduledFor: undefined,
-      channelResults: [
-        { channelId: "int_1", enginePostId: "pz_post_101" },
-      ],
+      channelResults: [{ channelId: "int_1", enginePostId: "pz_post_101" }],
     });
   });
 
@@ -108,9 +116,7 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
       enginePostId: "pz_sched_202",
       status: "SCHEDULED",
       scheduledFor: "2026-10-15T14:00:00.000Z",
-      channelResults: [
-        { channelId: "int_1", enginePostId: "pz_sched_202" },
-      ],
+      channelResults: [{ channelId: "int_1", enginePostId: "pz_sched_202" }],
     });
   });
 
@@ -128,9 +134,7 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
       enginePostId: "pz_now_303",
       status: "PUBLISHING",
       scheduledFor: undefined,
-      channelResults: [
-        { channelId: "int_1", enginePostId: "pz_now_303" },
-      ],
+      channelResults: [{ channelId: "int_1", enginePostId: "pz_now_303" }],
     });
   });
 
@@ -138,7 +142,10 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
     vi.spyOn(mockClient, "deletePost").mockResolvedValue({ success: true });
     const ok = await engine.cancelPost("pz_post_101");
     expect(ok).toBe(true);
-    expect(mockClient.deletePost).toHaveBeenCalledWith("pz_post_101", undefined);
+    expect(mockClient.deletePost).toHaveBeenCalledWith(
+      "pz_post_101",
+      undefined,
+    );
   });
 
   it("importMedia() normalizes media asset response", async () => {

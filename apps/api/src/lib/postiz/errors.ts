@@ -28,7 +28,11 @@ export class PostizError extends Error {
 }
 
 export class PostizAuthenticationError extends PostizError {
-  constructor(message = "Unauthorized: Invalid or missing Postiz API key", statusCode = 401, details?: unknown) {
+  constructor(
+    message = "Unauthorized: Invalid or missing Postiz API key",
+    statusCode = 401,
+    details?: unknown,
+  ) {
     super(message, {
       code: "POSTIZ_AUTHENTICATION_ERROR",
       statusCode,
@@ -66,7 +70,11 @@ export class PostizValidationError extends PostizError {
 export class PostizRateLimitError extends PostizError {
   public readonly retryAfterSeconds?: number | undefined;
 
-  constructor(message = "Postiz API rate limit exceeded", retryAfterSeconds?: number | undefined, details?: unknown) {
+  constructor(
+    message = "Postiz API rate limit exceeded",
+    retryAfterSeconds?: number | undefined,
+    details?: unknown,
+  ) {
     super(message, {
       code: "POSTIZ_RATE_LIMIT",
       statusCode: 429,
@@ -79,7 +87,11 @@ export class PostizRateLimitError extends PostizError {
 }
 
 export class PostizServerError extends PostizError {
-  constructor(message = "Postiz internal server error", statusCode = 500, details?: unknown) {
+  constructor(
+    message = "Postiz internal server error",
+    statusCode = 500,
+    details?: unknown,
+  ) {
     super(message, {
       code: "POSTIZ_SERVER_ERROR",
       statusCode,

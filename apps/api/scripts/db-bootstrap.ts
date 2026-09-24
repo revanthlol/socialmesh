@@ -15,7 +15,9 @@ function sanitizeUrl(rawUrl: string): string {
 
 async function bootstrapDatabase(url: string, label: string): Promise<void> {
   const sanitized = sanitizeUrl(url);
-  console.log(`[db-bootstrap] Initializing extensions on ${label}: ${sanitized}`);
+  console.log(
+    `[db-bootstrap] Initializing extensions on ${label}: ${sanitized}`,
+  );
 
   const client = new pg.Client({ connectionString: url });
   try {
@@ -49,7 +51,9 @@ async function main(): Promise<void> {
   }
 
   if (targetUrls.size === 0) {
-    console.warn("[db-bootstrap] No DIRECT_URL, DATABASE_URL, or SHADOW_DATABASE_URL configured. Skipping.");
+    console.warn(
+      "[db-bootstrap] No DIRECT_URL, DATABASE_URL, or SHADOW_DATABASE_URL configured. Skipping.",
+    );
     return;
   }
 
@@ -57,13 +61,18 @@ async function main(): Promise<void> {
     try {
       await bootstrapDatabase(url, label);
     } catch (err) {
-      console.error(`[db-bootstrap] Failed to bootstrap extensions on ${label}:`, err);
+      console.error(
+        `[db-bootstrap] Failed to bootstrap extensions on ${label}:`,
+        err,
+      );
       process.exitCode = 1;
       return;
     }
   }
 
-  console.log("[db-bootstrap] All PostgreSQL extensions successfully verified.");
+  console.log(
+    "[db-bootstrap] All PostgreSQL extensions successfully verified.",
+  );
 }
 
 main().catch((err) => {

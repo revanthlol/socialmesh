@@ -1,6 +1,9 @@
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../lib/errors.js";
-import type { CreateWorkspaceInput, UpdateWorkspaceInput } from "./workspace.schemas.js";
+import type {
+  CreateWorkspaceInput,
+  UpdateWorkspaceInput,
+} from "./workspace.schemas.js";
 
 export class WorkspaceService {
   async listUserWorkspaces(userId: string) {

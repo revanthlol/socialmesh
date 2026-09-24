@@ -50,7 +50,9 @@ export function useMediaActions(workspaceId?: string) {
       return confirmedAsset;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId, "media"] });
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "media"],
+      });
       queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId] });
     },
     onError: () => {
@@ -64,7 +66,9 @@ export function useMediaActions(workspaceId?: string) {
       return await api.delete(`/workspaces/${workspaceId}/media/${mediaId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId, "media"] });
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "media"],
+      });
       queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId] });
     },
   });

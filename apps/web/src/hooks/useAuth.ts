@@ -28,7 +28,10 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
-      return await api.post<{ user: User; workspaces: Workspace[] }>("/auth/login", credentials);
+      return await api.post<{ user: User; workspaces: Workspace[] }>(
+        "/auth/login",
+        credentials,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["auth"] });
@@ -43,7 +46,10 @@ export function useAuth() {
       displayName: string;
       workspaceName?: string;
     }) => {
-      return await api.post<{ user: User; workspace: Workspace }>("/auth/register", data);
+      return await api.post<{ user: User; workspace: Workspace }>(
+        "/auth/register",
+        data,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["auth"] });

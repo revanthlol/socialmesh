@@ -1,6 +1,7 @@
 import { forwardRef, type TextareaHTMLAttributes } from "react";
 
-export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+export interface TextareaProps
+  extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
   helperText?: string;
@@ -13,7 +14,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-xs font-semibold uppercase tracking-wider text-[#4c5359] mb-1.5">
+          <label
+            htmlFor={inputId}
+            className="block text-xs font-semibold uppercase tracking-wider text-[#4c5359] mb-1.5"
+          >
             {label}
           </label>
         )}
@@ -28,7 +32,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           {...props}
         />
         {error && <p className="mt-1 text-xs text-[#b23a24]">{error}</p>}
-        {helperText && !error && <p className="mt-1 text-xs text-[#6b706f]">{helperText}</p>}
+        {helperText && !error && (
+          <p className="mt-1 text-xs text-[#6b706f]">{helperText}</p>
+        )}
       </div>
     );
   },

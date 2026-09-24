@@ -35,7 +35,9 @@ export function LoginPage() {
           <p className="text-[11px] font-mono font-bold tracking-widest text-[#b23a24] uppercase">
             SociaMesh Auth
           </p>
-          <h1 className="text-2xl font-serif font-semibold text-[#161a1d] mt-1">Sign In</h1>
+          <h1 className="text-2xl font-serif font-semibold text-[#161a1d] mt-1">
+            Sign In
+          </h1>
           <p className="text-xs text-[#6b706f] mt-1">
             Access your social publishing workspaces.
           </p>
@@ -75,7 +77,10 @@ export function LoginPage() {
 
         <div className="mt-6 pt-4 border-t border-[#c9c5bb] text-center text-xs text-[#6b706f]">
           Don't have an account?{" "}
-          <Link to="/register" className="font-semibold text-[#161a1d] underline hover:text-[#b23a24]">
+          <Link
+            to="/register"
+            className="font-semibold text-[#161a1d] underline hover:text-[#b23a24]"
+          >
             Create Workspace
           </Link>
         </div>

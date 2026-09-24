@@ -8,6 +8,10 @@ import { env } from "./config/env.js";
 import { prisma } from "./lib/prisma.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { workspaceRouter } from "./modules/workspaces/workspace.routes.js";
+import { publishingRouter } from "./modules/publishing/publishing.routes.js";
+import { channelsOAuthRouter } from "./modules/channels/channels.routes.js";
+import { requireAuth } from "./middleware/auth.js";
+import { csrfProtection } from "./middleware/csrf.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 export function createApp() {
@@ -17,7 +21,9 @@ export function createApp() {
   app.set("trust proxy", 1);
   app.use(helmet());
 
-  const allowedOrigins = env.CORS_ORIGINS.split(",").map((origin) => origin.trim());
+  const allowedOrigins = env.CORS_ORIGINS.split(",").map((origin) =>
+    origin.trim(),
+  );
 
   app.use(
     cors({
@@ -28,7 +34,7 @@ export function createApp() {
         if (allowedOrigins.includes(origin)) {
           return callback(null, true);
         }
-        return callback(new Error("CORS origin not allowed: " + origin));
+        return callback(null, false);
       },
     }),
   );
@@ -36,10 +42,13 @@ export function createApp() {
   app.use(cookieParser());
   app.use(pinoHttp());
   app.use(express.json({ limit: "2mb" }));
+  app.use(csrfProtection);
 
   // Health and Readiness checks
   app.get("/healthz", (_request, response) => {
-    response.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+    response
+      .status(200)
+      .json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
   app.get("/readyz", async (_request, response) => {
@@ -55,6 +64,8 @@ export function createApp() {
   const apiV1Router = express.Router();
   apiV1Router.use("/auth", authRouter);
   apiV1Router.use("/workspaces", workspaceRouter);
+  apiV1Router.use("/channels", requireAuth, channelsOAuthRouter);
+  apiV1Router.use("/publishing", publishingRouter);
 
   app.use("/api/v1", apiV1Router);
 
