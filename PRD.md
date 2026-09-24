@@ -52,17 +52,17 @@ For a single-user demo, registration creates one workspace and one `OWNER` membe
 
 ### 4.2 Minimal RBAC matrix
 
-| Capability | Owner | Member |
-| --- | ---: | ---: |
-| View posts/calendar/accounts | Yes | Yes |
-| Create/edit/delete drafts | Yes | Yes |
-| Schedule/publish/cancel/retry | Yes | Yes |
-| Upload/delete unused media | Yes | Yes |
-| Connect or reconnect social accounts | Yes | No |
-| Disconnect social accounts | Yes | No |
-| Invite/remove members | Yes | No |
-| Edit workspace name/timezone | Yes | No |
-| Delete workspace | Yes | No |
+| Capability                           | Owner | Member |
+| ------------------------------------ | ----: | -----: |
+| View posts/calendar/accounts         |   Yes |    Yes |
+| Create/edit/delete drafts            |   Yes |    Yes |
+| Schedule/publish/cancel/retry        |   Yes |    Yes |
+| Upload/delete unused media           |   Yes |    Yes |
+| Connect or reconnect social accounts |   Yes |     No |
+| Disconnect social accounts           |   Yes |     No |
+| Invite/remove members                |   Yes |     No |
+| Edit workspace name/timezone         |   Yes |     No |
+| Delete workspace                     |   Yes |     No |
 
 Every API lookup must scope by `workspace_id`; knowing a UUID is never authorization.
 
@@ -130,15 +130,15 @@ api.<domain> -> Cloudflare DNS/TLS -> Caddy on Oracle VPS
 
 ### 6.1 Component ownership
 
-| Component | Runtime | Responsibility |
-| --- | --- | --- |
-| React/Vite/Tailwind | Vercel | authenticated UI, routing, forms, client cache |
-| Express API | Oracle VPS | auth, validation, OAuth callbacks, orchestration, provider calls |
-| Caddy | Oracle VPS | TLS to origin, reverse proxy, compression, security headers |
-| PostgreSQL + Prisma | Neon | source of truth, sessions, posts, job state, encrypted credentials |
-| Postiz + Temporal | Oracle VPS (Headless) | social publishing engine, durable timer scheduling, retries, OAuth connections |
-| R2 | Cloudflare | original media objects and temporary provider-readable media URLs |
-| GitHub Actions | GitHub | test/build, artifact deployment, migration gate |
+| Component           | Runtime               | Responsibility                                                                 |
+| ------------------- | --------------------- | ------------------------------------------------------------------------------ |
+| React/Vite/Tailwind | Vercel                | authenticated UI, routing, forms, client cache                                 |
+| Express API         | Oracle VPS            | auth, validation, OAuth callbacks, orchestration, provider calls               |
+| Caddy               | Oracle VPS            | TLS to origin, reverse proxy, compression, security headers                    |
+| PostgreSQL + Prisma | Neon                  | source of truth, sessions, posts, job state, encrypted credentials             |
+| Postiz + Temporal   | Oracle VPS (Headless) | social publishing engine, durable timer scheduling, retries, OAuth connections |
+| R2                  | Cloudflare            | original media objects and temporary provider-readable media URLs              |
+| GitHub Actions      | GitHub                | test/build, artifact deployment, migration gate                                |
 
 ### 6.2 Architectural boundaries
 
@@ -212,20 +212,20 @@ api.<domain> -> Cloudflare DNS/TLS -> Caddy on Oracle VPS
 
 ### 8.1 Routes/pages
 
-| Route | Page | Key behavior |
-| --- | --- | --- |
-| `/login` | Sign in | labeled fields, generic auth error, return URL |
-| `/register` | Create account | password rules, workspace creation |
-| `/` | Dashboard | upcoming, recent, failures, account health |
-| `/posts` | Post list | filters, pagination, status and targets |
-| `/posts/new` | Composer | copy, target picker, media, now/schedule |
-| `/posts/:id` | Post detail | target timeline, attempts, retry/duplicate |
-| `/posts/:id/edit` | Edit draft/scheduled | optimistic version check, reschedule |
-| `/calendar` | Calendar | month/week and accessible agenda list |
-| `/media` | Media library | upload state, reusable assets, delete unused |
-| `/settings/accounts` | Connected accounts | connect/reconnect/disconnect/status |
-| `/settings/workspace` | Workspace settings | name, timezone, members |
-| `*` | Not found | branded 404 with dashboard link |
+| Route                 | Page                 | Key behavior                                   |
+| --------------------- | -------------------- | ---------------------------------------------- |
+| `/login`              | Sign in              | labeled fields, generic auth error, return URL |
+| `/register`           | Create account       | password rules, workspace creation             |
+| `/`                   | Dashboard            | upcoming, recent, failures, account health     |
+| `/posts`              | Post list            | filters, pagination, status and targets        |
+| `/posts/new`          | Composer             | copy, target picker, media, now/schedule       |
+| `/posts/:id`          | Post detail          | target timeline, attempts, retry/duplicate     |
+| `/posts/:id/edit`     | Edit draft/scheduled | optimistic version check, reschedule           |
+| `/calendar`           | Calendar             | month/week and accessible agenda list          |
+| `/media`              | Media library        | upload state, reusable assets, delete unused   |
+| `/settings/accounts`  | Connected accounts   | connect/reconnect/disconnect/status            |
+| `/settings/workspace` | Workspace settings   | name, timezone, members                        |
+| `*`                   | Not found            | branded 404 with dashboard link                |
 
 ### 8.2 Component map
 
@@ -326,7 +326,9 @@ interface SocialPublisher {
   getAuthorizationUrl(input: OAuthStart): Promise<OAuthRedirect>;
   exchangeAuthorizationCode(input: OAuthCallback): Promise<TokenSet>;
   discoverAccounts(tokens: TokenSet): Promise<DiscoveredAccount[]>;
-  validateConnection(account: DecryptedSocialAccount): Promise<ConnectionHealth>;
+  validateConnection(
+    account: DecryptedSocialAccount,
+  ): Promise<ConnectionHealth>;
   validatePost(input: NormalizedPost): Promise<ValidationIssue[]>;
   publish(input: PublishCommand): Promise<PublishResult>;
   revoke?(account: DecryptedSocialAccount): Promise<void>;
@@ -409,6 +411,7 @@ The current Posts API replaces legacy `ugcPosts`; do not start new implementatio
 ### 12.2 Durable scheduling with Postiz + Temporal
 
 Postiz uses Temporal durable timers rather than cron or rolling schedulers.
+
 1. When a post is scheduled via `POST /api/public/v1/posts` with `type: "schedule"` and `date: ISO_DATE`, Postiz starts a Temporal workflow (`postWorkflowV112`).
 2. Temporal puts the workflow to sleep until the scheduled timestamp (`workflow.sleep(diffInMs)`). State is persisted durably in PostgreSQL.
 3. If the server or container restarts, Temporal wakes up the timer exactly on schedule without missed or duplicate posts.
@@ -463,21 +466,21 @@ The starter schema in `apps/api/prisma/schema.prisma` is the implementation base
 
 ### 14.1 Core tables
 
-| Table | Purpose and important fields |
-| --- | --- |
-| `users` | normalized unique email, Argon2id hash, display name, timestamps |
-| `sessions` | hashed opaque token, user, expiry, last seen, optional hashed IP/user agent |
-| `workspaces` | name and IANA timezone |
-| `memberships` | user/workspace unique pair and `OWNER`/`MEMBER` role |
-| `oauth_states` | hashed state, provider, PKCE verifier, expiry, consumed timestamp |
-| `social_accounts` | workspace/provider/resource ID, status, encrypted tokens, scopes, expiry, provider metadata |
-| `posts` | common content, derived status, schedule, timezone, version, error summary |
-| `post_targets` | one selected social account, granular state, target dispatch generation, provider result, retry fields |
-| `media_assets` | R2 object key, kind, verified metadata, lifecycle status |
-| `post_media` | ordered many-to-many link between posts and media |
-| `publish_attempts` | immutable attempt outcome and idempotency record |
-| `webhook_events` | deduplicated raw provider event record and processing state |
-| `audit_logs` | security/product actions without secret material |
+| Table              | Purpose and important fields                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `users`            | normalized unique email, Argon2id hash, display name, timestamps                                       |
+| `sessions`         | hashed opaque token, user, expiry, last seen, optional hashed IP/user agent                            |
+| `workspaces`       | name and IANA timezone                                                                                 |
+| `memberships`      | user/workspace unique pair and `OWNER`/`MEMBER` role                                                   |
+| `oauth_states`     | hashed state, provider, PKCE verifier, expiry, consumed timestamp                                      |
+| `social_accounts`  | workspace/provider/resource ID, status, encrypted tokens, scopes, expiry, provider metadata            |
+| `posts`            | common content, derived status, schedule, timezone, version, error summary                             |
+| `post_targets`     | one selected social account, granular state, target dispatch generation, provider result, retry fields |
+| `media_assets`     | R2 object key, kind, verified metadata, lifecycle status                                               |
+| `post_media`       | ordered many-to-many link between posts and media                                                      |
+| `publish_attempts` | immutable attempt outcome and idempotency record                                                       |
+| `webhook_events`   | deduplicated raw provider event record and processing state                                            |
+| `audit_logs`       | security/product actions without secret material                                                       |
 
 ### 14.2 Required indexes and constraints
 
@@ -520,58 +523,58 @@ All responses are JSON except OAuth redirects and health. Prefix product routes 
 
 ### 16.1 Auth/workspace
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `POST` | `/auth/register` | create user, workspace, owner session |
-| `POST` | `/auth/login` | create session cookie |
-| `POST` | `/auth/logout` | revoke current session |
-| `POST` | `/auth/logout-all` | revoke all user sessions |
-| `GET` | `/auth/me` | current user/workspaces/session |
-| `GET` | `/workspaces/:id` | workspace details |
-| `PATCH` | `/workspaces/:id` | owner updates name/timezone |
-| `GET` | `/workspaces/:id/members` | list members |
+| Method  | Path                      | Purpose                               |
+| ------- | ------------------------- | ------------------------------------- |
+| `POST`  | `/auth/register`          | create user, workspace, owner session |
+| `POST`  | `/auth/login`             | create session cookie                 |
+| `POST`  | `/auth/logout`            | revoke current session                |
+| `POST`  | `/auth/logout-all`        | revoke all user sessions              |
+| `GET`   | `/auth/me`                | current user/workspaces/session       |
+| `GET`   | `/workspaces/:id`         | workspace details                     |
+| `PATCH` | `/workspaces/:id`         | owner updates name/timezone           |
+| `GET`   | `/workspaces/:id/members` | list members                          |
 
 ### 16.2 Connections/OAuth
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/workspaces/:id/accounts` | list account health |
-| `POST` | `/workspaces/:id/oauth/:provider/start` | begin OAuth |
-| `GET` | `/oauth/:provider/callback` | fixed provider callback |
-| `POST` | `/workspaces/:id/oauth/:provider/complete` | select discovered resources |
-| `POST` | `/workspaces/:id/accounts/:accountId/reconnect` | begin replacement OAuth |
-| `DELETE` | `/workspaces/:id/accounts/:accountId` | revoke/disconnect |
-| `POST` | `/workspaces/:id/accounts/:accountId/validate` | owner-triggered health check |
+| Method   | Path                                            | Purpose                      |
+| -------- | ----------------------------------------------- | ---------------------------- |
+| `GET`    | `/workspaces/:id/accounts`                      | list account health          |
+| `POST`   | `/workspaces/:id/oauth/:provider/start`         | begin OAuth                  |
+| `GET`    | `/oauth/:provider/callback`                     | fixed provider callback      |
+| `POST`   | `/workspaces/:id/oauth/:provider/complete`      | select discovered resources  |
+| `POST`   | `/workspaces/:id/accounts/:accountId/reconnect` | begin replacement OAuth      |
+| `DELETE` | `/workspaces/:id/accounts/:accountId`           | revoke/disconnect            |
+| `POST`   | `/workspaces/:id/accounts/:accountId/validate`  | owner-triggered health check |
 
 ### 16.3 Posts/calendar
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/workspaces/:id/posts` | paginated filtered list |
-| `POST` | `/workspaces/:id/posts` | create draft |
-| `GET` | `/workspaces/:id/posts/:postId` | detail, targets, attempts |
-| `PATCH` | `/workspaces/:id/posts/:postId` | edit with version check |
-| `DELETE` | `/workspaces/:id/posts/:postId` | delete draft only |
-| `POST` | `/workspaces/:id/posts/:postId/schedule` | validate and schedule |
-| `POST` | `/workspaces/:id/posts/:postId/publish` | publish now, returns 202 |
-| `POST` | `/workspaces/:id/posts/:postId/cancel` | cancel unpublished targets |
-| `POST` | `/workspaces/:id/posts/:postId/targets/:targetId/retry` | retry one failed target |
-| `POST` | `/workspaces/:id/posts/:postId/duplicate` | duplicate as new draft |
-| `GET` | `/workspaces/:id/calendar?from=&to=` | scheduled/published range |
+| Method   | Path                                                    | Purpose                    |
+| -------- | ------------------------------------------------------- | -------------------------- |
+| `GET`    | `/workspaces/:id/posts`                                 | paginated filtered list    |
+| `POST`   | `/workspaces/:id/posts`                                 | create draft               |
+| `GET`    | `/workspaces/:id/posts/:postId`                         | detail, targets, attempts  |
+| `PATCH`  | `/workspaces/:id/posts/:postId`                         | edit with version check    |
+| `DELETE` | `/workspaces/:id/posts/:postId`                         | delete draft only          |
+| `POST`   | `/workspaces/:id/posts/:postId/schedule`                | validate and schedule      |
+| `POST`   | `/workspaces/:id/posts/:postId/publish`                 | publish now, returns 202   |
+| `POST`   | `/workspaces/:id/posts/:postId/cancel`                  | cancel unpublished targets |
+| `POST`   | `/workspaces/:id/posts/:postId/targets/:targetId/retry` | retry one failed target    |
+| `POST`   | `/workspaces/:id/posts/:postId/duplicate`               | duplicate as new draft     |
+| `GET`    | `/workspaces/:id/calendar?from=&to=`                    | scheduled/published range  |
 
 ### 16.4 Media and internal callbacks
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/workspaces/:id/media` | paginated media library |
-| `POST` | `/workspaces/:id/media/upload-url` | create asset and signed PUT |
-| `POST` | `/workspaces/:id/media/:mediaId/complete` | verify uploaded object |
-| `DELETE` | `/workspaces/:id/media/:mediaId` | delete unused asset |
-| `POST` | `/internal/jobs/cleanup` | Internal retention cleanup |
-| `GET/POST` | `/webhooks/meta` | Meta verification and signed events |
-| `POST` | `/webhooks/linkedin` | LinkedIn events if enabled/required |
-| `GET` | `/healthz` | process liveness, no secret details |
-| `GET` | `/readyz` | database readiness for deployment checks |
+| Method     | Path                                      | Purpose                                  |
+| ---------- | ----------------------------------------- | ---------------------------------------- |
+| `GET`      | `/workspaces/:id/media`                   | paginated media library                  |
+| `POST`     | `/workspaces/:id/media/upload-url`        | create asset and signed PUT              |
+| `POST`     | `/workspaces/:id/media/:mediaId/complete` | verify uploaded object                   |
+| `DELETE`   | `/workspaces/:id/media/:mediaId`          | delete unused asset                      |
+| `POST`     | `/internal/jobs/cleanup`                  | Internal retention cleanup               |
+| `GET/POST` | `/webhooks/meta`                          | Meta verification and signed events      |
+| `POST`     | `/webhooks/linkedin`                      | LinkedIn events if enabled/required      |
+| `GET`      | `/healthz`                                | process liveness, no secret details      |
+| `GET`      | `/readyz`                                 | database readiness for deployment checks |
 
 List endpoints use cursor pagination and a bounded default page size. Errors use a stable envelope:
 
