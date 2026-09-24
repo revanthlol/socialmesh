@@ -42,3 +42,7 @@ jobs:
 
       - name: Run Lint
         run: pnpm run lint
+
+      - name: Run Unit Tests
+        run: pnpm --filter @socialmesh/api run test:unit
+

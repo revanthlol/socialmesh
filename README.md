@@ -14,7 +14,7 @@ SociaMesh Express API (apps/api)
         |
         +--> Cloudflare R2 (Private Media Storage & Presigned Uploads)
         |
-        +--> Postiz Publishing Adapter (INTENTIONALLY DEFERRED / PENDING)
+        +--> Postiz Publishing Adapter (`apps/api/src/lib/postiz` - Active Typed Client Boundary)
 ```
 
 ### Ownership Boundaries
@@ -26,12 +26,13 @@ SociaMesh Express API (apps/api)
   - Editorial domain & Post drafting (authoring copy, attaching media assets, version incrementation, draft lifecycles)
   - Application shell & Dashboard UI (Overview, Compose, Media Library, Posts, Calendar, Connected Accounts placeholder, Settings)
   - Centralized API client & TanStack Query state caching
+  - Typed Postiz client adapter (`apps/api/src/lib/postiz`) encapsulating all public Postiz REST endpoints
 
-- **Postiz Infrastructure (Intentionally Pending):**
-  - Social network OAuth handshakes
-  - Access/refresh token lifecycle
-  - Upstream provider post dispatch & scheduling execution
-  - Provider post links & retries
+- **Postiz Infrastructure (Managed Separately):**
+  - Headless NestJS engine & Temporal orchestrator
+  - Social network OAuth handshakes & credentials storage
+  - Upstream provider post dispatch & durable timer-based scheduling
+  - Provider post links & automated worker retries
   - *Note: Postiz integration is managed independently; the SociaMesh core foundation does not touch Postiz containers, database, Redis, or Temporal.*
 
 ---
@@ -97,7 +98,12 @@ Generate the Prisma client:
 pnpm prisma:generate
 ```
 
-Verify database readiness:
+Bootstrap PostgreSQL extension (`citext`) and deploy migrations:
+```bash
+pnpm db:setup
+```
+
+Or verify database migration status:
 ```bash
 pnpm --filter @socialmesh/api exec prisma migrate status
 ```
@@ -115,7 +121,9 @@ Or run individually:
 - Full repository typecheck: `pnpm run typecheck`
 - Full repository build: `pnpm run build`
 - Full repository lint: `pnpm run lint`
-- API integration smoke tests: `pnpm --filter @socialmesh/api test`
+- Full test suite: `pnpm test`
+- Postiz adapter unit tests (mocked HTTP): `pnpm --filter @socialmesh/api run test:unit`
+
 
 ---
 

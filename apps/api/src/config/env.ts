@@ -14,6 +14,9 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET_NAME: z.string().default("socialmesh-media"),
   R2_ENDPOINT: z.string().optional(),
+  POSTIZ_BASE_URL: z.string().url().optional(),
+  POSTIZ_API_KEY: z.string().optional(),
+  POSTIZ_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
 });
 
 export const env = envSchema.parse(process.env);

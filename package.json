@@ -17,7 +17,10 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "prisma:generate": "pnpm --filter @socialmesh/api prisma:generate",
-    "prisma:migrate": "pnpm --filter @socialmesh/api prisma:migrate"
+    "prisma:bootstrap": "pnpm --filter @socialmesh/api prisma:bootstrap",
+    "prisma:migrate:deploy": "pnpm --filter @socialmesh/api prisma:migrate:deploy",
+    "prisma:migrate": "pnpm --filter @socialmesh/api prisma:migrate",
+    "db:setup": "pnpm --filter @socialmesh/api db:setup"
   },
   "devDependencies": {
     "prettier": "3.6.2"

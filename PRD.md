@@ -9,7 +9,7 @@
 
 SociaMesh is a small-team social publishing application. A user connects one or more Facebook Pages, Instagram Professional accounts, and LinkedIn member profiles, creates a post once, selects destinations, uploads media, and either publishes immediately or schedules publication. The dashboard shows drafts, upcoming work, per-destination publishing progress, successful provider post links, and actionable failures.
 
-The MVP deliberately keeps the Oracle VPS stateless apart from process logs and deployment artifacts. The VPS runs one Node.js/Express API behind Caddy. Vercel hosts the static React application, Neon hosts PostgreSQL, Upstash QStash invokes delayed/background jobs over HTTPS, and Cloudflare R2 stores media. Redis and BullMQ are not part of the MVP.
+The MVP deliberately keeps the Oracle VPS lean and focused. The VPS runs the SociaMesh Node.js/Express API behind Caddy alongside a headless Postiz + Temporal publishing engine. Vercel hosts the static React application, Neon hosts PostgreSQL, and Cloudflare R2 stores media. Postiz and Temporal own actual scheduling, durable timers, automatic retries, and provider publishing. Upstash QStash is not used.
 
 SociaMesh must use official OAuth and publishing APIs. It never asks for or stores a social-network password. Scraping, browser automation, stored browser sessions, private endpoints, session cookies, Playwright, and Selenium are prohibited.
 
@@ -118,13 +118,14 @@ api.<domain> -> Cloudflare DNS/TLS -> Caddy on Oracle VPS
                                  Express API
                             /        |       \
                            v         v        v
-                  Neon PostgreSQL  R2 media  Official provider APIs
-                           ^         ^        Meta / LinkedIn
-                           |         |
-                           +----+----+
-                                |
-                       QStash signed HTTPS calls
-                 dispatcher + per-target publish callbacks
+                  Neon PostgreSQL  R2 media  Postiz Engine (Headless)
+                                                       |
+                                                       v
+                                            Temporal Durable Scheduler
+                                                       |
+                                                       v
+                                            Official Provider APIs
+                                              (Meta / LinkedIn / X)
 ```
 
 ### 6.1 Component ownership
@@ -135,15 +136,15 @@ api.<domain> -> Cloudflare DNS/TLS -> Caddy on Oracle VPS
 | Express API | Oracle VPS | auth, validation, OAuth callbacks, orchestration, provider calls |
 | Caddy | Oracle VPS | TLS to origin, reverse proxy, compression, security headers |
 | PostgreSQL + Prisma | Neon | source of truth, sessions, posts, job state, encrypted credentials |
-| QStash | Upstash | recurring dispatcher and delayed signed HTTP delivery |
+| Postiz + Temporal | Oracle VPS (Headless) | social publishing engine, durable timer scheduling, retries, OAuth connections |
 | R2 | Cloudflare | original media objects and temporary provider-readable media URLs |
 | GitHub Actions | GitHub | test/build, artifact deployment, migration gate |
 
 ### 6.2 Architectural boundaries
 
-- The browser never receives provider client secrets, social access tokens, QStash credentials, R2 secret keys, or database credentials.
-- QStash messages contain only internal IDs and a dispatch generation, never provider tokens or post media.
-- PostgreSQL is the source of truth. QStash is a delivery mechanism, not the job database.
+- The browser never receives provider client secrets, social access tokens, Postiz API keys, R2 secret keys, or database credentials.
+- SociaMesh interacts with Postiz exclusively through a typed backend adapter (apps/api/src/lib/postiz).
+- PostgreSQL is the source of truth for SociaMesh user and workspace data; Postiz manages publishing workflows and provider tokens.
 - Provider-specific request shapes stay behind adapters. Controllers do not call Graph API or LinkedIn endpoints directly.
 - R2 object metadata is stored in PostgreSQL; binary content is not.
 
@@ -201,10 +202,10 @@ api.<domain> -> Cloudflare DNS/TLS -> Caddy on Oracle VPS
 
 ### 7.6 Reliability
 
-- **REL-01:** A duplicate QStash delivery cannot create a second provider publication after a successful `PublishAttempt` is recorded.
+- **REL-01:** Postiz and Temporal durable workflows ensure idempotency, preventing duplicate provider publications.
 - **REL-02:** Retry only failures classified as retryable. Respect provider `Retry-After` and rate-limit resets.
 - **REL-03:** Record every attempt without logging credentials or full provider payloads.
-- **REL-04:** A reconciliation job finds stale `PUBLISHING` targets and unknown QStash enqueue outcomes.
+- **REL-04:** Postiz orchestrator monitors publishing workflow status and records terminal errors if provider delivery fails.
 - **REL-05:** All dates use UTC in storage and ISO 8601 over the API.
 
 ## 8. Frontend requirements
@@ -294,7 +295,7 @@ apps/api/src/
   services/
     encryption.ts
     r2.ts
-    qstash.ts
+    postiz/
   generated/prisma/
 ```
 
@@ -306,7 +307,7 @@ Each feature module uses `route -> controller -> service -> repository/provider`
 2. proxy/HTTPS enforcement in production
 3. Helmet security headers
 4. strict origin-aware CORS with credentials
-5. route-specific raw body capture for QStash/provider signature verification
+5. route-specific raw body capture for provider webhook signature verification
 6. JSON body limit for normal routes
 7. session authentication
 8. CSRF/origin validation for cookie-authenticated mutations
@@ -315,7 +316,7 @@ Each feature module uses `route -> controller -> service -> repository/provider`
 11. controller
 12. normalized error handler
 
-Do not globally parse QStash or provider webhook bodies before signature verification if the signature scheme depends on raw bytes.
+Do not globally parse provider webhook bodies before signature verification if the signature scheme depends on raw bytes.
 
 ## 10. Provider abstraction
 
@@ -400,43 +401,28 @@ The current Posts API replaces legacy `ugcPosts`; do not start new implementatio
 ### 12.1 Publish-now flow
 
 1. Validate membership, target ownership/status, post content, media readiness, provider capabilities, and optimistic `version`.
-2. In one transaction, freeze the post version, create/update targets, and set target schedules to now.
-3. Enqueue one QStash message per target rather than holding the HTTP request open. Respond `202 Accepted` with post ID and target states.
-4. QStash calls the internal publish endpoint. API verifies the raw-body signature and URL claim.
-5. Atomically claim the target only if its generation and state match. Set target and parent to publishing and create `PublishAttempt`.
-6. Decrypt the token in memory, generate any media URL/upload, call the provider, and zero/discard local references as soon as practical.
-7. Persist success and provider ID/URL, or a sanitized classified error. Recompute parent status.
+2. Ensure media assets stored in R2 have public or signed URLs accessible to Postiz.
+3. SociaMesh Express API calls Postiz REST endpoint `POST /api/public/v1/posts` with `type: "now"`.
+4. Postiz starts a Temporal workflow to dispatch publishing immediately to selected social platforms.
+5. SociaMesh records the publication attempt and updates local post status.
 
-### 12.2 QStash seven-day limit and rolling scheduler
+### 12.2 Durable scheduling with Postiz + Temporal
 
-QStash Free currently allows delayed messages for at most seven days. Scheduled posts may be months away, so SociaMesh must not try to enqueue every post at creation time.
+Postiz uses Temporal durable timers rather than cron or rolling schedulers.
+1. When a post is scheduled via `POST /api/public/v1/posts` with `type: "schedule"` and `date: ISO_DATE`, Postiz starts a Temporal workflow (`postWorkflowV112`).
+2. Temporal puts the workflow to sleep until the scheduled timestamp (`workflow.sleep(diffInMs)`). State is persisted durably in PostgreSQL.
+3. If the server or container restarts, Temporal wakes up the timer exactly on schedule without missed or duplicate posts.
+4. If a scheduled post is cancelled via `DELETE /api/public/v1/posts/:id`, Postiz terminates the Temporal workflow immediately.
 
-Use this rolling strategy:
+### 12.3 Security and boundaries
 
-1. Create **one QStash cron schedule** that calls `POST /api/v1/internal/jobs/dispatch-scheduled` every 15 minutes in UTC.
-2. The endpoint verifies the QStash signature, then finds targets whose status is `SCHEDULED`, whose `scheduled_for` is between now and `now + 6 days 23 hours`, and which do not have a confirmed current-generation delivery.
-3. Claim a small batch with a transaction/advisory lock or `FOR UPDATE SKIP LOCKED`. Increment `dispatch_generation`, mark `DISPATCHED`, and commit before the network call.
-4. Publish a delayed QStash message to `/api/v1/internal/jobs/publish-target` with `{ postTargetId, generation }` and `notBefore=scheduled_for`.
-5. Save the returned QStash message ID. If the network result is unknown, the next dispatcher may enqueue another message, but the generation/state/idempotency checks make extra callbacks no-ops.
-6. Posts farther than the rolling horizon remain only in PostgreSQL. A later dispatcher brings them into the QStash window.
-7. A schedule edit/cancel increments `dispatch_generation`, clears the active message ID, and attempts to delete the old QStash message. A late callback with an old generation returns `204` without publishing.
-8. Run the same dispatcher immediately after schedule creation for posts inside the horizon so they do not wait 15 minutes.
-
-Use a horizon below exactly seven days to absorb clock skew and queue/API latency. Store schedules in UTC; display the original IANA timezone. A 15-minute dispatcher interval does not reduce publish precision because QStash receives the exact `notBefore` time.
-
-### 12.3 Delivery security and idempotency
-
-- Verify `Upstash-Signature` with current and next signing keys against the raw request body and exact public destination URL.
-- The destination accepts no cookie session and is not callable with `QSTASH_TOKEN`; that token is outbound only.
-- Idempotency key format: `publish:{postTargetId}:generation:{generation}`.
-- Unique database constraints prevent two successful attempt records for the same logical delivery path.
-- Atomic claim condition includes target status, generation, and lack of `providerPostId`.
-- A callback for an already published/cancelled/stale target returns `204` so QStash stops retrying.
-- Return 5xx only for retryable infrastructure/provider failures. Return 2xx after recording terminal user/content/auth errors.
+- SociaMesh communicates with Postiz over HTTP using `POSTIZ_BASE_URL` and `POSTIZ_API_KEY` (backend-only).
+- Neither Postiz API keys nor provider tokens are ever exposed to the web frontend.
+- Provider secrets reside securely inside the Postiz environment.
 
 ### 12.4 Retry policy
 
-- QStash transport retry: default exponential backoff, configured to a small bounded count such as 3 for the MVP.
+- Temporal activities handle retries with exponential backoff (initial interval 10s, max 10 attempts).
 - Application retry: maximum 5 provider attempts per target over 24 hours, with provider `Retry-After` taking precedence.
 - Backoff baseline: 1 minute, 5 minutes, 30 minutes, 2 hours, 8 hours plus jitter.
 - Authentication, permission, validation, and unsupported-media errors are terminal until user action.
@@ -486,7 +472,7 @@ The starter schema in `apps/api/prisma/schema.prisma` is the implementation base
 | `oauth_states` | hashed state, provider, PKCE verifier, expiry, consumed timestamp |
 | `social_accounts` | workspace/provider/resource ID, status, encrypted tokens, scopes, expiry, provider metadata |
 | `posts` | common content, derived status, schedule, timezone, version, error summary |
-| `post_targets` | one selected social account, granular state, QStash generation/message, provider result, retry fields |
+| `post_targets` | one selected social account, granular state, target dispatch generation, provider result, retry fields |
 | `media_assets` | R2 object key, kind, verified metadata, lifecycle status |
 | `post_media` | ordered many-to-many link between posts and media |
 | `publish_attempts` | immutable attempt outcome and idempotency record |
@@ -502,7 +488,7 @@ The starter schema in `apps/api/prisma/schema.prisma` is the implementation base
 - `posts(workspace_id, status, scheduled_for)` for lists and calendar.
 - `post_targets(status, scheduled_for)` for rolling dispatch.
 - `post_targets(status, next_attempt_at)` for retry/reconciliation.
-- Unique QStash/attempt idempotency identifiers where present.
+- Unique provider/attempt idempotency identifiers where present.
 - Unique R2 `object_key`.
 - Unique `(post_id, position)` media ordering.
 - Webhook provider event uniqueness where the provider supplies an ID; otherwise dedupe by provider, type, payload hash, and a bounded received-time check.
@@ -513,7 +499,7 @@ The starter schema in `apps/api/prisma/schema.prisma` is the implementation base
 - Scheduler selects/claims batches under row locking; network calls happen after commit.
 - Publishing claims a target with a single conditional update. Zero updated rows means another delivery owns it or it is stale.
 - Parent status recalculation and target terminal update occur in one transaction.
-- Avoid long transactions around provider, R2, or QStash network calls.
+- Avoid long transactions around provider, R2, or Postiz network calls.
 
 ## 15. Token encryption and secret handling
 
@@ -581,9 +567,7 @@ All responses are JSON except OAuth redirects and health. Prefix product routes 
 | `POST` | `/workspaces/:id/media/upload-url` | create asset and signed PUT |
 | `POST` | `/workspaces/:id/media/:mediaId/complete` | verify uploaded object |
 | `DELETE` | `/workspaces/:id/media/:mediaId` | delete unused asset |
-| `POST` | `/internal/jobs/dispatch-scheduled` | QStash-signed rolling dispatcher |
-| `POST` | `/internal/jobs/publish-target` | QStash-signed publisher |
-| `POST` | `/internal/jobs/cleanup` | QStash-signed retention cleanup |
+| `POST` | `/internal/jobs/cleanup` | Internal retention cleanup |
 | `GET/POST` | `/webhooks/meta` | Meta verification and signed events |
 | `POST` | `/webhooks/linkedin` | LinkedIn events if enabled/required |
 | `GET` | `/healthz` | process liveness, no secret details |
