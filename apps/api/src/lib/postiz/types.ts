@@ -54,7 +54,7 @@ export const PostizIntegrationSchema = z.object({
   identifier: z.string(),
   picture: z.string().nullable().optional(),
   disabled: z.boolean().optional(),
-  profile: z.record(z.string(), z.unknown()).optional(),
+  profile: z.record(z.string(), z.unknown()).nullable().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
@@ -72,23 +72,31 @@ export const PostizSuccessResponseSchema = z.object({
   success: z.boolean().optional(),
   message: z.string().optional(),
   deleted: z.boolean().optional(),
+  error: z.unknown().optional(),
+  id: z.string().optional(),
 });
 export type PostizSuccessResponse = z.infer<typeof PostizSuccessResponseSchema>;
 
 export const PostizPostSchema = z.object({
-  id: z.string(),
+  id: z.string().optional(),
   postId: z.string().optional(),
   state: z.string().optional(),
   publishDate: z.string().optional(),
   content: z.string().optional(),
   releaseId: z.string().nullable().optional(),
   integrations: z.array(z.unknown()).optional(),
+  integration: z.unknown().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
 export type PostizPost = z.infer<typeof PostizPostSchema>;
 
-export const PostizListPostsResponseSchema = z.array(PostizPostSchema);
+export const PostizListPostsResponseSchema = z.union([
+  z.array(PostizPostSchema),
+  z.object({
+    posts: z.array(PostizPostSchema),
+  }).transform((val) => val.posts),
+]);
 export type PostizListPostsResponse = z.infer<typeof PostizListPostsResponseSchema>;
 
 export const PostizCreatePostResponseSchema = z.union([

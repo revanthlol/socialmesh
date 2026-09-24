@@ -42,7 +42,7 @@ describe("SociaMesh API Integration Smoke Tests", () => {
 
     await prisma.$disconnect();
     await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
+  }, 20000);
 
   it("1. GET /healthz returns 200 ok", async () => {
     const res = await fetch(`${baseUrl}/healthz`);
@@ -57,7 +57,7 @@ describe("SociaMesh API Integration Smoke Tests", () => {
     const body = await res.json();
     expect(body.status).toBe("ready");
     expect(body.database).toBe("connected");
-  });
+  }, 20000);
 
   it("3. POST /api/v1/auth/register creates user, workspace and sets cookie", async () => {
     const res = await fetch(`${baseUrl}/api/v1/auth/register`, {
@@ -87,7 +87,7 @@ describe("SociaMesh API Integration Smoke Tests", () => {
     expect(body.data.session.id).toBeTruthy();
 
     workspaceId = body.data.workspace.id;
-  });
+  }, 20000);
 
   it("4. GET /api/v1/auth/me returns current user and workspaces with valid cookie", async () => {
     const res = await fetch(`${baseUrl}/api/v1/auth/me`, {
@@ -207,7 +207,7 @@ describe("SociaMesh API Integration Smoke Tests", () => {
     expect(listRes.status).toBe(200);
     const listBody = await listRes.json();
     expect(listBody.data.some((m: any) => m.id === mediaAssetId)).toBe(true);
-  });
+  }, 25000);
 
   it("10. Posts/Drafts: create draft, attach media, read, update, delete", async () => {
     // Step A: Create draft

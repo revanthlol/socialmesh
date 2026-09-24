@@ -16,7 +16,6 @@ import {
   type PostizConnectUrlResponse,
   PostizConnectUrlResponseSchema,
   type PostizCreateDraftInput,
-  type PostizCreatePostPayload,
   type PostizCreatePostResponse,
   PostizCreatePostResponseSchema,
   type PostizIntegration,
@@ -41,8 +40,21 @@ const defaultLogger = pino({
 });
 
 /**
+ * Direct headless Postiz API routes (NestJS without Nginx proxy).
+ */
+export const POSTIZ_DIRECT_ENDPOINTS = {
+  isConnected: "/public/v1/is-connected",
+  integrations: "/public/v1/integrations",
+  social: (provider: string) => `/public/v1/social/${encodeURIComponent(provider)}`,
+  integrationById: (id: string) => `/public/v1/integrations/${encodeURIComponent(id)}`,
+  posts: "/public/v1/posts",
+  postById: (id: string) => `/public/v1/posts/${encodeURIComponent(id)}`,
+  uploadFromUrl: "/public/v1/upload-from-url",
+} as const;
+
+/**
  * Encapsulated Postiz API client adapter for SociaMesh.
- * Communicates with the headless Postiz NestJS REST backend.
+ * Directly communicates with the headless Postiz NestJS REST backend.
  */
 export class PostizClient {
   private readonly baseUrl: string;
@@ -52,11 +64,52 @@ export class PostizClient {
   private readonly logger: pino.Logger;
 
   constructor(config: Partial<PostizConfig> = {}, logger?: pino.Logger) {
-    this.baseUrl = (config.baseUrl ?? env.POSTIZ_BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+    this.baseUrl = (config.baseUrl ?? env.POSTIZ_BASE_URL ?? "http://localhost:4008").replace(/\/+$/, "");
     this.apiKey = config.apiKey ?? env.POSTIZ_API_KEY ?? "";
     this.timeoutMs = config.timeoutMs ?? env.POSTIZ_TIMEOUT_MS ?? 10000;
     this.organizationId = config.organizationId;
     this.logger = logger ?? defaultLogger;
+  }
+
+  /**
+   * Constructs the post payload supporting headless NestJS post validation.
+   */
+  private buildPostPayload(
+    type: "draft" | "schedule" | "now",
+    input: (PostizCreateDraftInput | PostizSchedulePostInput | PostizPublishNowInput) & { date?: string | undefined },
+  ): Record<string, unknown> {
+    const raw = input as any;
+    if (Array.isArray(raw.posts)) {
+      return {
+        type,
+        date: input.date ?? new Date().toISOString(),
+        shortLink: false,
+        tags: [],
+        ...raw,
+      };
+    }
+
+    const mappedPosts = (input.integrations || []).map((item) => {
+      const integrationId = typeof item === "string" ? item : item.id;
+      const customContent = typeof item === "object" && item.customContent ? item.customContent : input.content ?? "";
+      return {
+        integration: { id: integrationId },
+        value: [{ content: customContent, image: [] }],
+        settings: input.settings ?? {},
+      };
+    });
+
+    return {
+      type,
+      date: input.date ?? new Date().toISOString(),
+      shortLink: false,
+      tags: [],
+      content: input.content,
+      integrations: input.integrations,
+      posts: mappedPosts,
+      media: input.media,
+      settings: input.settings,
+    };
   }
 
   /**
@@ -76,15 +129,17 @@ export class PostizClient {
     }
 
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
+
+    // Safeguard against accidental /api prefix
+    if (cleanPath.startsWith("/api/")) {
+      throw new PostizValidationError(`Direct headless Postiz routes must not include /api prefix: ${cleanPath}`);
+    }
+
     const url = `${this.baseUrl}${cleanPath}`;
     const timeoutMs = options?.timeoutMs ?? this.timeoutMs;
     const orgId = options?.organizationId ?? this.organizationId;
 
     const controller = new AbortController();
-    const abortSignals: AbortSignal[] = [controller.signal];
-    if (options?.signal) {
-      abortSignals.push(options.signal);
-    }
 
     const headers: Record<string, string> = {
       Authorization: this.apiKey,
@@ -160,7 +215,9 @@ export class PostizClient {
 
         const message =
           (typeof errorBody === "object" && errorBody !== null && "message" in errorBody
-            ? String((errorBody as { message: unknown }).message)
+            ? Array.isArray((errorBody as { message: unknown }).message)
+              ? (errorBody as { message: unknown[] }).message.join(", ")
+              : String((errorBody as { message: unknown }).message)
             : undefined) ?? `Postiz API responded with status ${response.status}`;
 
         if (response.status === 401 || response.status === 403) {
@@ -254,7 +311,7 @@ export class PostizClient {
     }
     try {
       await this.request(
-        "/api/public/v1/is-connected",
+        POSTIZ_DIRECT_ENDPOINTS.isConnected,
         { method: "GET" },
         options,
         PostizIsConnectedResponseSchema,
@@ -271,7 +328,7 @@ export class PostizClient {
    */
   async listIntegrations(options?: PostizRequestOptions): Promise<PostizIntegration[]> {
     return this.request(
-      "/api/public/v1/integrations",
+      POSTIZ_DIRECT_ENDPOINTS.integrations,
       { method: "GET" },
       options,
       PostizListIntegrationsResponseSchema,
@@ -283,9 +340,8 @@ export class PostizClient {
    * Returns the external provider authorization URL.
    */
   async getConnectUrl(provider: string, options?: PostizRequestOptions): Promise<string> {
-    const encoded = encodeURIComponent(provider);
     const data = await this.request(
-      `/api/public/v1/social/${encoded}`,
+      POSTIZ_DIRECT_ENDPOINTS.social(provider),
       { method: "GET" },
       options,
       PostizConnectUrlResponseSchema,
@@ -297,14 +353,14 @@ export class PostizClient {
    * Disconnect an active integration by its ID.
    */
   async disconnectIntegration(id: string, options?: PostizRequestOptions): Promise<{ success: boolean }> {
-    const encoded = encodeURIComponent(id);
     const res = await this.request(
-      `/api/public/v1/integrations/${encoded}`,
+      POSTIZ_DIRECT_ENDPOINTS.integrationById(id),
       { method: "DELETE" },
       options,
       PostizSuccessResponseSchema,
     );
-    return { success: res.success ?? res.deleted ?? true };
+    const isSuccess = res.success !== false && res.deleted !== false;
+    return { success: isSuccess };
   }
 
   /**
@@ -312,12 +368,13 @@ export class PostizClient {
    */
   async listPosts(startDate: string, endDate: string, options?: PostizRequestOptions): Promise<PostizPost[]> {
     const query = new URLSearchParams({ startDate, endDate }).toString();
-    return this.request(
-      `/api/public/v1/posts?${query}`,
+    const result = await this.request(
+      `${POSTIZ_DIRECT_ENDPOINTS.posts}?${query}`,
       { method: "GET" },
       options,
       PostizListPostsResponseSchema,
     );
+    return Array.isArray(result) ? result : (result as { posts: PostizPost[] }).posts ?? [];
   }
 
   /**
@@ -327,12 +384,9 @@ export class PostizClient {
     input: PostizCreateDraftInput,
     options?: PostizRequestOptions,
   ): Promise<PostizCreatePostResponse> {
-    const payload: PostizCreatePostPayload = {
-      ...input,
-      type: "draft",
-    };
+    const payload = this.buildPostPayload("draft", input);
     return this.request(
-      "/api/public/v1/posts",
+      POSTIZ_DIRECT_ENDPOINTS.posts,
       {
         method: "POST",
         body: JSON.stringify(payload),
@@ -349,12 +403,9 @@ export class PostizClient {
     input: PostizSchedulePostInput,
     options?: PostizRequestOptions,
   ): Promise<PostizCreatePostResponse> {
-    const payload: PostizCreatePostPayload = {
-      ...input,
-      type: "schedule",
-    };
+    const payload = this.buildPostPayload("schedule", input);
     return this.request(
-      "/api/public/v1/posts",
+      POSTIZ_DIRECT_ENDPOINTS.posts,
       {
         method: "POST",
         body: JSON.stringify(payload),
@@ -371,12 +422,9 @@ export class PostizClient {
     input: PostizPublishNowInput,
     options?: PostizRequestOptions,
   ): Promise<PostizCreatePostResponse> {
-    const payload: PostizCreatePostPayload = {
-      ...input,
-      type: "now",
-    };
+    const payload = this.buildPostPayload("now", input);
     return this.request(
-      "/api/public/v1/posts",
+      POSTIZ_DIRECT_ENDPOINTS.posts,
       {
         method: "POST",
         body: JSON.stringify(payload),
@@ -390,14 +438,17 @@ export class PostizClient {
    * Cancel and delete a post in Postiz. Terminates running Temporal workflows.
    */
   async deletePost(id: string, options?: PostizRequestOptions): Promise<{ success: boolean }> {
-    const encoded = encodeURIComponent(id);
     const res = await this.request(
-      `/api/public/v1/posts/${encoded}`,
+      POSTIZ_DIRECT_ENDPOINTS.postById(id),
       { method: "DELETE" },
       options,
       PostizSuccessResponseSchema,
     );
-    return { success: res.success ?? res.deleted ?? true };
+    // In Postiz (posts.service.ts:700), DELETE /public/v1/posts/:id returns HTTP 200 with { error: true }
+    // upon successfully soft-deleting the post group and cancelling workflows. Non-2xx responses throw.
+    // Explicit failure only occurs if res.success === false or res.deleted === false.
+    const isSuccess = res.success !== false && res.deleted !== false;
+    return { success: isSuccess };
   }
 
   /**
@@ -405,7 +456,7 @@ export class PostizClient {
    */
   async uploadFromUrl(url: string, options?: PostizRequestOptions): Promise<PostizUploadFromUrlResponse> {
     return this.request(
-      "/api/public/v1/upload-from-url",
+      POSTIZ_DIRECT_ENDPOINTS.uploadFromUrl,
       {
         method: "POST",
         body: JSON.stringify({ url }),

@@ -12,7 +12,7 @@ import {
 } from "./index.js";
 
 describe("PostizClient (Adapter Boundary)", () => {
-  const fakeBaseUrl = "http://postiz.internal.local:3000";
+  const fakeBaseUrl = "http://localhost:4008";
   const fakeApiKey = "test_api_key_secret_12345";
   let client: PostizClient;
 
@@ -42,7 +42,7 @@ describe("PostizClient (Adapter Boundary)", () => {
       const result = await client.isConnected();
       expect(result).toBe(true);
       expect(fetch).toHaveBeenCalledWith(
-        "http://postiz.internal.local:3000/api/public/v1/is-connected",
+        "http://localhost:4008/public/v1/is-connected",
         expect.objectContaining({
           method: "GET",
           headers: expect.objectContaining({
@@ -148,7 +148,7 @@ describe("PostizClient (Adapter Boundary)", () => {
       const url = await client.getConnectUrl("linkedin-page");
       expect(url).toBe("https://www.linkedin.com/oauth/v2/authorization?client_id=123");
       expect(fetch).toHaveBeenCalledWith(
-        "http://postiz.internal.local:3000/api/public/v1/social/linkedin-page",
+        "http://localhost:4008/public/v1/social/linkedin-page",
         expect.anything(),
       );
     });
@@ -168,7 +168,7 @@ describe("PostizClient (Adapter Boundary)", () => {
       const res = await client.disconnectIntegration("int_abc_123");
       expect(res.success).toBe(true);
       expect(fetch).toHaveBeenCalledWith(
-        "http://postiz.internal.local:3000/api/public/v1/integrations/int_abc_123",
+        "http://localhost:4008/public/v1/integrations/int_abc_123",
         expect.objectContaining({ method: "DELETE" }),
       );
     });
@@ -198,7 +198,7 @@ describe("PostizClient (Adapter Boundary)", () => {
       const posts = await client.listPosts("2026-10-01T00:00:00Z", "2026-10-02T00:00:00Z");
       expect(posts).toEqual(mockPosts);
       expect(fetch).toHaveBeenCalledWith(
-        "http://postiz.internal.local:3000/api/public/v1/posts?startDate=2026-10-01T00%3A00%3A00Z&endDate=2026-10-02T00%3A00%3A00Z",
+        "http://localhost:4008/public/v1/posts?startDate=2026-10-01T00%3A00%3A00Z&endDate=2026-10-02T00%3A00%3A00Z",
         expect.anything(),
       );
     });
@@ -222,16 +222,22 @@ describe("PostizClient (Adapter Boundary)", () => {
 
       expect(res).toEqual({ id: "post_draft_1", state: "DRAFT", content: "Draft content" });
       expect(fetch).toHaveBeenCalledWith(
-        "http://postiz.internal.local:3000/api/public/v1/posts",
+        "http://localhost:4008/public/v1/posts",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({
-            content: "Draft content",
-            integrations: ["int_1"],
-            type: "draft",
-          }),
         }),
       );
+      const call = (fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.type).toBe("draft");
+      expect(body.content).toBe("Draft content");
+      expect(body.posts).toEqual([
+        {
+          integration: { id: "int_1" },
+          value: [{ content: "Draft content", image: [] }],
+          settings: {},
+        },
+      ]);
     });
 
     it("schedulePost dispatches POST with type: 'schedule' and date", async () => {
@@ -260,17 +266,22 @@ describe("PostizClient (Adapter Boundary)", () => {
         publishDate: "2026-11-01T15:00:00Z",
       });
       expect(fetch).toHaveBeenCalledWith(
-        "http://postiz.internal.local:3000/api/public/v1/posts",
+        "http://localhost:4008/public/v1/posts",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({
-            content: "Holiday promo",
-            date: "2026-11-01T15:00:00Z",
-            integrations: ["int_1"],
-            type: "schedule",
-          }),
         }),
       );
+      const call = (fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.type).toBe("schedule");
+      expect(body.date).toBe("2026-11-01T15:00:00Z");
+      expect(body.posts).toEqual([
+        {
+          integration: { id: "int_1" },
+          value: [{ content: "Holiday promo", image: [] }],
+          settings: {},
+        },
+      ]);
     });
 
     it("publishNow dispatches POST with type: 'now'", async () => {
@@ -290,21 +301,26 @@ describe("PostizClient (Adapter Boundary)", () => {
 
       expect(res).toEqual({ id: "post_now_1", state: "PROCESSING" });
       expect(fetch).toHaveBeenCalledWith(
-        "http://postiz.internal.local:3000/api/public/v1/posts",
+        "http://localhost:4008/public/v1/posts",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({
-            content: "Breaking announcement",
-            integrations: ["int_1"],
-            type: "now",
-          }),
         }),
       );
+      const call = (fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.type).toBe("now");
+      expect(body.posts).toEqual([
+        {
+          integration: { id: "int_1" },
+          value: [{ content: "Breaking announcement", image: [] }],
+          settings: {},
+        },
+      ]);
     });
   });
 
   describe("deletePost()", () => {
-    it("sends DELETE to /api/public/v1/posts/:id", async () => {
+    it("sends DELETE to /public/v1/posts/:id", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue({
@@ -317,9 +333,55 @@ describe("PostizClient (Adapter Boundary)", () => {
       const res = await client.deletePost("post_to_cancel");
       expect(res.success).toBe(true);
       expect(fetch).toHaveBeenCalledWith(
-        "http://postiz.internal.local:3000/api/public/v1/posts/post_to_cancel",
+        "http://localhost:4008/public/v1/posts/post_to_cancel",
         expect.objectContaining({ method: "DELETE" }),
       );
+    });
+
+    it("normalizes Postiz quirk returning { error: true } on HTTP 200 into { success: true }", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ error: true }),
+        }),
+      );
+
+      const res = await client.deletePost("post_live_quirk");
+      expect(res.success).toBe(true);
+      expect(fetch).toHaveBeenCalledWith(
+        "http://localhost:4008/public/v1/posts/post_live_quirk",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+
+    it("normalizes { deleted: true } into { success: true }", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ deleted: true }),
+        }),
+      );
+
+      const res = await client.deletePost("post_deleted_flag");
+      expect(res.success).toBe(true);
+    });
+
+    it("respects explicit { success: false } response", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: false }),
+        }),
+      );
+
+      const res = await client.deletePost("post_fail");
+      expect(res.success).toBe(false);
     });
   });
 
@@ -340,6 +402,13 @@ describe("PostizClient (Adapter Boundary)", () => {
       const res = await client.uploadFromUrl("https://r2.example.com/socialmesh-media/image.png");
       expect(res.id).toBe("media_pz_99");
       expect(res.path).toBe("https://r2.example.com/socialmesh-media/image.png");
+      expect(fetch).toHaveBeenCalledWith(
+        "http://localhost:4008/public/v1/upload-from-url",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ url: "https://r2.example.com/socialmesh-media/image.png" }),
+        }),
+      );
     });
   });
 
@@ -541,6 +610,31 @@ describe("PostizClient (Adapter Boundary)", () => {
 
       const connected = await unconfiguredClient.isConnected();
       expect(connected).toBe(false);
+    });
+  });
+
+  describe("Routing & Path Protection", () => {
+    it("rejects paths with /api prefix to prevent accidental legacy routes", async () => {
+      await expect(
+        (client as any).request("/api/public/v1/is-connected", {}),
+      ).rejects.toThrow(PostizValidationError);
+
+      await expect(
+        (client as any).request("/api/public/v1/posts", {}),
+      ).rejects.toThrow(/Direct headless Postiz routes must not include \/api prefix/);
+    });
+
+    it("defaults baseUrl to http://localhost:4008 if not explicitly configured", () => {
+      const defaultClient = new PostizClient({ apiKey: "key123" });
+      expect((defaultClient as any).baseUrl).toBe("http://localhost:4008");
+    });
+
+    it("normalizes and strips trailing slashes from baseUrl", () => {
+      const slashClient = new PostizClient({
+        baseUrl: "http://localhost:4008///",
+        apiKey: "key123",
+      });
+      expect((slashClient as any).baseUrl).toBe("http://localhost:4008");
     });
   });
 });
