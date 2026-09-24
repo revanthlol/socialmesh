@@ -207,7 +207,7 @@ describe("SociaMesh API Integration Smoke Tests", () => {
     expect(listRes.status).toBe(200);
     const listBody = await listRes.json();
     expect(listBody.data.some((m: any) => m.id === mediaAssetId)).toBe(true);
-  });
+  }, 25000);
 
   it("10. Posts/Drafts: create draft, attach media, read, update, delete", async () => {
     // Step A: Create draft

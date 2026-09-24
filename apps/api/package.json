@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
     "test": "vitest run --passWithNoTests",
     "test:unit": "vitest run src/lib/postiz/postiz.test.ts",
+    "test:smoke": "tsx scripts/postiz-smoke.ts",
     "lint": "tsc -p tsconfig.json --noEmit --pretty false",
     "prisma:generate": "prisma generate",
     "prisma:bootstrap": "tsx scripts/db-bootstrap.ts",
