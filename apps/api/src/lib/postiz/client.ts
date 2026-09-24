@@ -68,6 +68,9 @@ export class PostizClient {
     options?: PostizRequestOptions,
     schema?: ZodType<T>,
   ): Promise<T> {
+    if (!this.baseUrl) {
+      throw new PostizValidationError("Postiz base URL is not configured. Set POSTIZ_BASE_URL.");
+    }
     if (!this.apiKey) {
       throw new PostizAuthenticationError("Postiz API key is not configured. Set POSTIZ_API_KEY.");
     }
@@ -246,6 +249,9 @@ export class PostizClient {
    * Returns true if Postiz is reachable and the API key is accepted.
    */
   async isConnected(options?: PostizRequestOptions): Promise<boolean> {
+    if (!this.apiKey || !this.baseUrl) {
+      return false;
+    }
     try {
       await this.request(
         "/api/public/v1/is-connected",

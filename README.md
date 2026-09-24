@@ -98,7 +98,7 @@ Generate the Prisma client:
 pnpm prisma:generate
 ```
 
-Bootstrap PostgreSQL extensions (`citext`, `uuid-ossp`, `pgcrypto`) and deploy migrations:
+Bootstrap PostgreSQL extension (`citext`) and deploy migrations:
 ```bash
 pnpm db:setup
 ```

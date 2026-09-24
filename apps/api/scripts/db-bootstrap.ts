@@ -21,7 +21,7 @@ async function bootstrapDatabase(url: string, label: string): Promise<void> {
   try {
     await client.connect();
 
-    const extensions = ["citext", "uuid-ossp", "pgcrypto"];
+    const extensions = ["citext"];
     for (const ext of extensions) {
       await client.query(`CREATE EXTENSION IF NOT EXISTS "${ext}";`);
       console.log(`[db-bootstrap] Extension "${ext}" ensured on ${label}.`);

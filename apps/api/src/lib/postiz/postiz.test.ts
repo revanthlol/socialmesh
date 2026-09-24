@@ -523,5 +523,25 @@ describe("PostizClient (Adapter Boundary)", () => {
 
       await expect(noKeyClient.listIntegrations()).rejects.toThrow(PostizAuthenticationError);
     });
+
+    it("throws PostizValidationError if baseUrl is empty", async () => {
+      const noUrlClient = new PostizClient({
+        baseUrl: "",
+        apiKey: fakeApiKey,
+      });
+
+      await expect(noUrlClient.listIntegrations()).rejects.toThrow(PostizValidationError);
+    });
+
+    it("isConnected() returns false safely when apiKey or baseUrl is missing without throwing", async () => {
+      const unconfiguredClient = new PostizClient({
+        baseUrl: "",
+        apiKey: "",
+      });
+
+      const connected = await unconfiguredClient.isConnected();
+      expect(connected).toBe(false);
+    });
   });
 });
+
