@@ -105,6 +105,17 @@ export class PostsController {
       next(error);
     }
   }
+
+  async reconcile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workspaceId = getParam(req, "workspaceId");
+      const postId = getParam(req, "postId");
+      const post = await postsService.reconcilePostStatus(workspaceId, postId);
+      res.status(200).json({ data: post });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const postsController = new PostsController();

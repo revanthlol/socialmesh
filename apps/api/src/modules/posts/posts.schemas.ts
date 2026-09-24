@@ -41,10 +41,12 @@ export const listPostsQuerySchema = z.object({
     .enum([
       "DRAFT",
       "SCHEDULED",
+      "PROCESSING",
       "PUBLISHING",
       "PUBLISHED",
       "FAILED",
       "CANCELLED",
+      "PARTIAL",
     ])
     .optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50).optional(),

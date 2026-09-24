@@ -184,7 +184,7 @@ export function ComposePage() {
       await publishPost(post.id);
       setStatusMessage({
         type: "success",
-        text: "Post published successfully!",
+        text: "Post accepted by publishing engine and processing!",
       });
       setTimeout(() => navigate(`/app/${workspaceId}/posts`), 1200);
     } catch (err: any) {

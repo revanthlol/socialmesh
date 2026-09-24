@@ -22,6 +22,7 @@ const STATUS_TABS: { label: string; value?: PostStatus }[] = [
   { label: "All Items" },
   { label: "Drafts", value: "DRAFT" },
   { label: "Scheduled", value: "SCHEDULED" },
+  { label: "Processing", value: "PROCESSING" },
   { label: "Published", value: "PUBLISHED" },
   { label: "Failed", value: "FAILED" },
   { label: "Cancelled", value: "CANCELLED" },
@@ -33,10 +34,14 @@ function getStatusBadgeVariant(status: PostStatus): BadgeVariant {
       return "draft";
     case "SCHEDULED":
       return "scheduled";
+    case "PROCESSING":
+      return "processing";
     case "PUBLISHING":
       return "publishing";
     case "PUBLISHED":
       return "published";
+    case "PARTIAL":
+      return "partial";
     case "FAILED":
       return "failed";
     case "CANCELLED":

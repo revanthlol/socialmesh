@@ -52,4 +52,10 @@ router.delete(
   channelsController.disconnect,
 );
 
-export { router as channelsRouter };
+// Workspace-scoped resolve
+router.post("/oauth/resolve", channelsController.resolvePending);
+
+const oauthRouter = Router();
+oauthRouter.post("/oauth/resolve", channelsController.resolvePending);
+
+export { router as channelsRouter, oauthRouter as channelsOAuthRouter };

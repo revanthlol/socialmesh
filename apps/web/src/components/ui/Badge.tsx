@@ -11,7 +11,9 @@ export type BadgeVariant =
   | "scheduled"
   | "failed"
   | "cancelled"
-  | "publishing";
+  | "publishing"
+  | "processing"
+  | "partial";
 
 export interface BadgeProps {
   children: ReactNode;
@@ -32,9 +34,11 @@ export function Badge({
     scheduled: "bg-[#eef2f6] text-[#1e4d7b] border-[#c7d9ec]",
     warning: "bg-[#fdf5e6] text-[#935f11] border-[#fae2b8]",
     publishing: "bg-[#fdf5e6] text-[#935f11] border-[#fae2b8]",
+    processing: "bg-[#fdf5e6] text-[#935f11] border-[#fae2b8]",
     danger: "bg-[#fbeeed] text-[#b23a24] border-[#f4c6bf]",
     failed: "bg-[#fbeeed] text-[#b23a24] border-[#f4c6bf]",
     cancelled: "bg-[#f2f0e9] text-[#787878] border-[#c9c5bb]",
+    partial: "bg-[#f5eefb] text-[#5e2786] border-[#dac3ed]",
     owner: "bg-[#161a1d] text-white border-[#161a1d]",
   };
 

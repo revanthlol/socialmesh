@@ -27,10 +27,14 @@ function getStatusBadgeVariant(status: PostStatus): BadgeVariant {
       return "draft";
     case "SCHEDULED":
       return "scheduled";
+    case "PROCESSING":
+      return "processing";
     case "PUBLISHING":
       return "publishing";
     case "PUBLISHED":
       return "published";
+    case "PARTIAL":
+      return "partial";
     case "FAILED":
       return "failed";
     case "CANCELLED":

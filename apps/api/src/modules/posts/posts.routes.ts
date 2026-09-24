@@ -48,5 +48,10 @@ router.post(
   validate({ params: postParamSchema }),
   postsController.cancel,
 );
+router.post(
+  "/:postId/reconcile",
+  validate({ params: postParamSchema }),
+  postsController.reconcile,
+);
 
 export { router as postsRouter };

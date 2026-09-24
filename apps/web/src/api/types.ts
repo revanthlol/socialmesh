@@ -50,10 +50,12 @@ export interface MediaAsset {
 export type PostStatus =
   | "DRAFT"
   | "SCHEDULED"
+  | "PROCESSING"
   | "PUBLISHING"
   | "PUBLISHED"
   | "FAILED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "PARTIAL";
 
 export interface WorkspaceChannel {
   id: string;
@@ -80,8 +82,12 @@ export interface AvailableChannel {
 export interface PostTargetItem {
   id: string;
   channelId: string | null;
+  postizPostId?: string | null;
   status: PostStatus;
+  scheduledFor?: string | null;
   publishedAt?: string | null;
+  lastError?: string | null;
+  lastErrorCode?: string | null;
   channel?: {
     id: string;
     postizIntegrationId: string;
@@ -106,7 +112,6 @@ export interface Post {
   publishedAt: string | null;
   lastErrorCode?: string | null;
   lastError?: string | null;
-  postizPostId?: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;

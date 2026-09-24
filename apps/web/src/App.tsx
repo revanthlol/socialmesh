@@ -19,6 +19,9 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
 
+      {/* Static OAuth Callback Route (single Postiz FRONTEND_URL target) */}
+      <Route path="/accounts/callback" element={<OAuthCallbackPage />} />
+
       {/* Authenticated Workspace Redirect */}
       <Route path="/app" element={<WorkspaceRedirect />} />
 

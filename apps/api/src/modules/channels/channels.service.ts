@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../lib/errors.js";
 import {
@@ -180,9 +181,154 @@ export class ChannelsService {
   }
 
   /**
+   * Start an OAuth connection flow:
+   * 1. Creates an expiring PendingChannelConnection in DB storing (workspaceId, userId, provider, stateToken, expiresAt).
+   * 2. Requests provider connect URL from Postiz.
+   * 3. Returns { url, stateToken }.
+   */
+  async startOAuthConnection(
+    workspaceId: string,
+    userId: string,
+    provider: string,
+  ) {
+    // Verify user is an OWNER of this workspace
+    const membership = await prisma.membership.findUnique({
+      where: { userId_workspaceId: { userId, workspaceId } },
+    });
+    if (!membership || membership.role !== "OWNER") {
+      throw AppError.forbidden(
+        "Only workspace owners can connect social accounts",
+      );
+    }
+
+    const stateToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Persist pending connection state
+    await prisma.pendingChannelConnection.create({
+      data: {
+        workspaceId,
+        userId,
+        provider,
+        stateToken,
+        expiresAt,
+      },
+    });
+
+    const url = await this.publishingEngine.getChannelConnectUrl(provider);
+    return { url, stateToken };
+  }
+
+  /**
+   * Resolve an OAuth callback connection:
+   * 1. Resolves PendingChannelConnection by stateToken.
+   * 2. Validates not expired.
+   * 3. Verifies calling user matches initiating user.
+   * 4. Verifies user is still OWNER of the original workspace.
+   * 5. Refreshes integrations from Postiz.
+   * 6. Finds the integration matching this provider and assigns it to the original workspace.
+   * 7. Consumes (deletes) the pending state record.
+   */
+  async resolvePendingConnection(userId: string, stateToken: string) {
+    if (!stateToken || typeof stateToken !== "string") {
+      throw AppError.badRequest("Invalid or missing OAuth state token");
+    }
+
+    const pending = await prisma.pendingChannelConnection.findUnique({
+      where: { stateToken },
+    });
+
+    if (!pending) {
+      throw AppError.badRequest("Unknown or invalid OAuth connection state");
+    }
+
+    if (pending.expiresAt < new Date()) {
+      await prisma.pendingChannelConnection
+        .delete({ where: { id: pending.id } })
+        .catch(() => {});
+      throw AppError.badRequest("OAuth connection state has expired");
+    }
+
+    if (pending.userId !== userId) {
+      throw AppError.forbidden("Cross-user or cross-workspace claim denied");
+    }
+
+    // Verify still OWNER of the originating workspace
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_workspaceId: { userId, workspaceId: pending.workspaceId },
+      },
+    });
+    if (!membership || membership.role !== "OWNER") {
+      throw AppError.forbidden(
+        "User is no longer owner of the initiating workspace",
+      );
+    }
+
+    // Query Postiz integrations
+    const integrations = await this.publishingEngine.listChannels();
+
+    // Query existing assignments across all workspaces
+    const existing = await prisma.workspaceChannel.findMany({
+      select: { postizIntegrationId: true, workspaceId: true },
+    });
+
+    // Find integration for this provider that is unassigned, or matches provider
+    const unassignedIntegrations = integrations.filter(
+      (int) => !existing.some((e) => e.postizIntegrationId === int.id),
+    );
+
+    const matchingIntegration =
+      unassignedIntegrations.find((int) => int.provider === pending.provider) ||
+      unassignedIntegrations[0] ||
+      integrations.find((int) => int.provider === pending.provider);
+
+    let assignedChannel = null;
+    if (matchingIntegration) {
+      const alreadyInWorkspace = await prisma.workspaceChannel.findUnique({
+        where: {
+          workspaceId_postizIntegrationId: {
+            workspaceId: pending.workspaceId,
+            postizIntegrationId: matchingIntegration.id,
+          },
+        },
+      });
+
+      if (!alreadyInWorkspace) {
+        assignedChannel = await prisma.workspaceChannel.create({
+          data: {
+            workspaceId: pending.workspaceId,
+            postizIntegrationId: matchingIntegration.id,
+            provider: matchingIntegration.provider,
+            name: matchingIntegration.name,
+            pictureUrl: matchingIntegration.pictureUrl ?? null,
+          },
+        });
+      } else {
+        assignedChannel = alreadyInWorkspace;
+      }
+    }
+
+    // Single-use: delete pending record
+    await prisma.pendingChannelConnection.delete({
+      where: { id: pending.id },
+    });
+
+    return {
+      success: true,
+      workspaceId: pending.workspaceId,
+      provider: pending.provider,
+      channel: assignedChannel,
+    };
+  }
+
+  /**
    * Generate an OAuth connect URL for a provider from Postiz.
    */
-  async getConnectUrl(provider: string) {
+  async getConnectUrl(provider: string, workspaceId?: string, userId?: string) {
+    if (workspaceId && userId) {
+      return this.startOAuthConnection(workspaceId, userId, provider);
+    }
     const url = await this.publishingEngine.getChannelConnectUrl(provider);
     return { url };
   }

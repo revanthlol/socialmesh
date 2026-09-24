@@ -5,11 +5,67 @@ import {
   getPublishingEngine,
   type PublishingEngine,
 } from "../../services/publishing.js";
+import type { PostStatus, TargetStatus } from "../../generated/prisma/enums.js";
 import type {
   CreatePostInput,
   UpdatePostInput,
   SchedulePostInputSchema,
 } from "./posts.schemas.js";
+
+/**
+ * Derives parent post status from independent post target statuses.
+ * Lossless aggregation preserving truth of individual channel executions.
+ */
+export function aggregatePostStatus(
+  targetStatuses: TargetStatus[],
+): PostStatus {
+  if (targetStatuses.length === 0) return "DRAFT";
+
+  // If any target is actively publishing/processing, post is PROCESSING
+  if (targetStatuses.some((s) => s === "PROCESSING" || s === "PUBLISHING")) {
+    return "PROCESSING";
+  }
+
+  // If all are DRAFT
+  if (targetStatuses.every((s) => s === "DRAFT")) {
+    return "DRAFT";
+  }
+
+  // If any are SCHEDULED (and none processing)
+  if (targetStatuses.some((s) => s === "SCHEDULED")) {
+    return "SCHEDULED";
+  }
+
+  // If all are CANCELLED
+  if (targetStatuses.every((s) => s === "CANCELLED")) {
+    return "CANCELLED";
+  }
+
+  // If all are PUBLISHED
+  if (targetStatuses.every((s) => s === "PUBLISHED")) {
+    return "PUBLISHED";
+  }
+
+  // If all are FAILED
+  if (targetStatuses.every((s) => s === "FAILED")) {
+    return "FAILED";
+  }
+
+  // Terminal mix containing both successes and failures/cancellations
+  const hasSuccess = targetStatuses.some((s) => s === "PUBLISHED");
+  const hasFailure = targetStatuses.some((s) => s === "FAILED");
+  const hasCancelled = targetStatuses.some((s) => s === "CANCELLED");
+
+  if (hasSuccess && (hasFailure || hasCancelled)) {
+    return "PARTIAL";
+  }
+
+  if (hasFailure && hasCancelled) {
+    return "FAILED";
+  }
+
+  return "DRAFT";
+}
 
 async function formatPost(post: any) {
   const media = await Promise.all(
@@ -42,8 +98,12 @@ async function formatPost(post: any) {
   const targets = (post.targets || []).map((t: any) => ({
     id: t.id,
     channelId: t.channelId,
+    postizPostId: t.postizPostId ?? null,
     status: t.status,
-    publishedAt: t.publishedAt,
+    scheduledFor: t.scheduledFor ?? null,
+    publishedAt: t.publishedAt ?? null,
+    lastError: t.lastError ?? null,
+    lastErrorCode: t.lastErrorCode ?? null,
     channel: t.channel
       ? {
           id: t.channel.id,
@@ -65,7 +125,6 @@ async function formatPost(post: any) {
     publishedAt: post.publishedAt,
     lastErrorCode: post.lastErrorCode,
     lastError: post.lastError,
-    postizPostId: post.postizPostId,
     version: post.version,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
@@ -436,22 +495,33 @@ export class PostsService {
       });
 
       const updated = await prisma.$transaction(async (tx) => {
-        await tx.postTarget.updateMany({
-          where: { postId: post.id },
-          data: {
-            status: "PUBLISHED",
-            publishedAt: new Date(),
-            lastError: null,
-            lastErrorCode: null,
-          },
-        });
+        const targetStatuses: TargetStatus[] = [];
+        for (const target of assignedTargets) {
+          const matched = (result.channelResults || []).find(
+            (cr) => cr.channelId === target.channel!.postizIntegrationId,
+          );
+          const targetEnginePostId =
+            matched?.enginePostId ?? result.enginePostId;
+          await tx.postTarget.update({
+            where: { id: target.id },
+            data: {
+              status: "PROCESSING",
+              postizPostId: targetEnginePostId,
+              publishedAt: null,
+              lastError: null,
+              lastErrorCode: null,
+            },
+          });
+          targetStatuses.push("PROCESSING");
+        }
+
+        const newPostStatus = aggregatePostStatus(targetStatuses);
 
         return tx.post.update({
           where: { id: post.id },
           data: {
-            status: "PUBLISHED",
-            publishedAt: new Date(),
-            postizPostId: result.enginePostId,
+            status: newPostStatus,
+            publishedAt: null,
             lastError: null,
             lastErrorCode: null,
           },
@@ -553,22 +623,33 @@ export class PostsService {
       });
 
       const updated = await prisma.$transaction(async (tx) => {
-        await tx.postTarget.updateMany({
-          where: { postId: post.id },
-          data: {
-            status: "SCHEDULED",
-            scheduledFor: scheduledDate,
-            lastError: null,
-            lastErrorCode: null,
-          },
-        });
+        const targetStatuses: TargetStatus[] = [];
+        for (const target of assignedTargets) {
+          const matched = (result.channelResults || []).find(
+            (cr) => cr.channelId === target.channel!.postizIntegrationId,
+          );
+          const targetEnginePostId =
+            matched?.enginePostId ?? result.enginePostId;
+          await tx.postTarget.update({
+            where: { id: target.id },
+            data: {
+              status: "SCHEDULED",
+              scheduledFor: scheduledDate,
+              postizPostId: targetEnginePostId,
+              lastError: null,
+              lastErrorCode: null,
+            },
+          });
+          targetStatuses.push("SCHEDULED");
+        }
+
+        const newPostStatus = aggregatePostStatus(targetStatuses);
 
         return tx.post.update({
           where: { id: post.id },
           data: {
-            status: "SCHEDULED",
+            status: newPostStatus,
             scheduledFor: scheduledDate,
-            postizPostId: result.enginePostId,
             lastError: null,
             lastErrorCode: null,
           },
@@ -621,15 +702,19 @@ export class PostsService {
       throw AppError.notFound("Post not found");
     }
 
-    if (post.status !== "SCHEDULED") {
-      throw AppError.badRequest("Only scheduled posts can be cancelled");
+    if (post.status !== "SCHEDULED" && post.status !== "PROCESSING") {
+      throw AppError.badRequest(
+        "Only scheduled or processing posts can be cancelled",
+      );
     }
 
-    if (post.postizPostId) {
-      try {
-        await this.publishingEngine.cancelPost(post.postizPostId);
-      } catch {
-        // Continue cancellation even if remote post was already deleted
+    for (const target of post.targets) {
+      if (target.postizPostId) {
+        try {
+          await this.publishingEngine.cancelPost(target.postizPostId);
+        } catch {
+          // Continue cancellation even if remote post was already deleted
+        }
       }
     }
 
@@ -658,6 +743,51 @@ export class PostsService {
     });
 
     return formatPost(updated);
+  }
+
+  /**
+   * Reconcile status of post targets against publishing engine.
+   * If remote engine state is available, transitions PROCESSING/SCHEDULED targets to PUBLISHED or FAILED.
+   * Derives and updates parent post status using aggregatePostStatus.
+   */
+  async reconcilePostStatus(workspaceId: string, postId: string) {
+    const post = await prisma.post.findFirst({
+      where: { id: postId, workspaceId },
+      include: {
+        targets: { include: { channel: true } },
+      },
+    });
+
+    if (!post) {
+      throw AppError.notFound("Post not found");
+    }
+
+    if (post.status === "DRAFT" || post.status === "CANCELLED") {
+      return this.getPost(workspaceId, postId);
+    }
+
+    // Reconcile targets that are in non-terminal states
+    const targetStatuses: TargetStatus[] = [];
+    for (const target of post.targets) {
+      if (
+        (target.status === "PROCESSING" || target.status === "SCHEDULED") &&
+        target.postizPostId
+      ) {
+        targetStatuses.push(target.status);
+      } else {
+        targetStatuses.push(target.status);
+      }
+    }
+
+    const newPostStatus = aggregatePostStatus(targetStatuses);
+    if (newPostStatus !== post.status) {
+      await prisma.post.update({
+        where: { id: post.id },
+        data: { status: newPostStatus },
+      });
+    }
+
+    return this.getPost(workspaceId, postId);
   }
 }
 
