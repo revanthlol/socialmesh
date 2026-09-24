@@ -337,6 +337,52 @@ describe("PostizClient (Adapter Boundary)", () => {
         expect.objectContaining({ method: "DELETE" }),
       );
     });
+
+    it("normalizes Postiz quirk returning { error: true } on HTTP 200 into { success: true }", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ error: true }),
+        }),
+      );
+
+      const res = await client.deletePost("post_live_quirk");
+      expect(res.success).toBe(true);
+      expect(fetch).toHaveBeenCalledWith(
+        "http://localhost:4008/public/v1/posts/post_live_quirk",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+
+    it("normalizes { deleted: true } into { success: true }", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ deleted: true }),
+        }),
+      );
+
+      const res = await client.deletePost("post_deleted_flag");
+      expect(res.success).toBe(true);
+    });
+
+    it("respects explicit { success: false } response", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: false }),
+        }),
+      );
+
+      const res = await client.deletePost("post_fail");
+      expect(res.success).toBe(false);
+    });
   });
 
   describe("uploadFromUrl()", () => {

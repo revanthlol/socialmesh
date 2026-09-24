@@ -72,7 +72,8 @@ export const PostizSuccessResponseSchema = z.object({
   success: z.boolean().optional(),
   message: z.string().optional(),
   deleted: z.boolean().optional(),
-  error: z.boolean().optional(),
+  error: z.unknown().optional(),
+  id: z.string().optional(),
 });
 export type PostizSuccessResponse = z.infer<typeof PostizSuccessResponseSchema>;
 

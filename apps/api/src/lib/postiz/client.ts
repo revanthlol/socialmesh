@@ -359,7 +359,8 @@ export class PostizClient {
       options,
       PostizSuccessResponseSchema,
     );
-    return { success: res.success ?? res.deleted ?? !res.error };
+    const isSuccess = res.success !== false && res.deleted !== false;
+    return { success: isSuccess };
   }
 
   /**
@@ -443,7 +444,11 @@ export class PostizClient {
       options,
       PostizSuccessResponseSchema,
     );
-    return { success: res.success ?? res.deleted ?? !res.error };
+    // In Postiz (posts.service.ts:700), DELETE /public/v1/posts/:id returns HTTP 200 with { error: true }
+    // upon successfully soft-deleting the post group and cancelling workflows. Non-2xx responses throw.
+    // Explicit failure only occurs if res.success === false or res.deleted === false.
+    const isSuccess = res.success !== false && res.deleted !== false;
+    return { success: isSuccess };
   }
 
   /**
