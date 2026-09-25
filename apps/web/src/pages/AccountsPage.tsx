@@ -13,6 +13,7 @@ import {
 import { useChannels } from "../hooks/useChannels.js";
 import { usePublishingStatus } from "../hooks/usePublishingStatus.js";
 import { Button } from "../components/ui/Button.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
 import { Badge } from "../components/ui/Badge.js";
 import type {
   Workspace,
@@ -120,21 +121,16 @@ export function AccountsPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl w-full mx-auto space-y-6">
+    <div className="p-4 sm:p-6 md:p-8 max-w-5xl w-full mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#c9c5bb]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-serif font-bold text-[#161a1d]">
+            <h1 className="text-2xl font-serif font-bold text-[#161a1d] dark:text-white">
               Workspace Channels
             </h1>
-            {isEngineConnected ? (
-              <Badge variant="published">Engine Connected</Badge>
-            ) : (
-              <Badge variant="failed">Engine Offline</Badge>
-            )}
           </div>
-          <p className="text-xs text-[#6b706f] mt-1">
+          <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-1">
             Social publishing destinations assigned to this workspace from the
             shared organization.
           </p>
@@ -166,7 +162,7 @@ export function AccountsPage() {
       </div>
 
       {actionError && (
-        <div className="p-3 rounded text-xs flex items-center justify-between border bg-[#fbeeed] text-[#b23a24] border-[#f4c6bf]">
+        <div className="p-3 rounded text-xs flex items-center justify-between border bg-[#fbeeed] text-[#b23a24] dark:text-[#e05a3a] border-[#f4c6bf]">
           <span>{actionError}</span>
           <button
             onClick={() => setActionError(null)}
@@ -177,16 +173,14 @@ export function AccountsPage() {
         </div>
       )}
 
-      {/* Engine Offline Warning */}
+      {/* Service Offline Warning */}
       {!isEngineConnected && (
-        <div className="p-4 rounded border border-[#f4c6bf] bg-[#fbeeed] text-xs text-[#b23a24] flex items-center gap-3">
+        <div className="p-4 rounded border border-[#f4c6bf] bg-[#fbeeed] text-xs text-[#b23a24] dark:text-[#e05a3a] flex items-center gap-3">
           <ShieldAlert className="h-5 w-5 shrink-0" />
           <div>
-            <p className="font-semibold">Publishing Engine Unavailable</p>
+            <p className="font-semibold">Publishing Services Paused</p>
             <p className="opacity-90">
-              The underlying Postiz publishing engine is currently unreachable.
-              You can continue authoring and saving drafts, but connecting or
-              publishing to social channels is paused.
+              Social channel synchronization is temporarily paused. You can continue authoring and saving drafts locally.
             </p>
           </div>
         </div>
@@ -194,19 +188,33 @@ export function AccountsPage() {
 
       {/* Channels List */}
       {isLoading ? (
-        <div className="p-12 text-center text-xs font-mono text-[#6b706f]">
-          Loading assigned channels...
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div
+              key={i}
+              className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-4"
+            >
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="space-y-1.5 flex-1">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+              <Skeleton className="h-8 w-full rounded" />
+            </div>
+          ))}
         </div>
       ) : channels.length === 0 ? (
-        <div className="p-12 text-center border border-dashed border-[#c9c5bb] rounded bg-[#faf9f5] space-y-4">
-          <div className="h-12 w-12 rounded-full bg-[#e8e6df] text-[#6b706f] flex items-center justify-center mx-auto">
+        <div className="p-12 text-center border border-dashed border-[#c9c5bb] dark:border-white/[0.08] rounded bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-4">
+          <div className="h-12 w-12 rounded-full bg-[#e8e6df] text-[#6b706f] dark:text-zinc-500 flex items-center justify-center mx-auto">
             <Share2 className="h-6 w-6" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-[#161a1d]">
+            <h3 className="text-sm font-semibold text-[#161a1d] dark:text-white">
               No Channels Assigned
             </h3>
-            <p className="text-xs text-[#6b706f] max-w-sm mx-auto">
+            <p className="text-xs text-[#6b706f] dark:text-zinc-500 max-w-sm mx-auto">
               This workspace has no active social channels. Workspace owners can
               assign existing accounts from the organization or connect a new
               provider.
@@ -239,7 +247,7 @@ export function AccountsPage() {
             return (
               <div
                 key={channel.id}
-                className="p-4 rounded border border-[#c9c5bb] bg-[#faf9f5] flex flex-col justify-between space-y-4 shadow-sm"
+                className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] flex flex-col justify-between space-y-4 shadow-sm"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -247,7 +255,7 @@ export function AccountsPage() {
                       <img
                         src={channel.pictureUrl}
                         alt={channel.name}
-                        className="h-10 w-10 rounded-full object-cover border border-[#c9c5bb]"
+                        className="h-10 w-10 rounded-full object-cover border border-[#c9c5bb] dark:border-white/[0.08]"
                       />
                     ) : (
                       <div className="h-10 w-10 rounded-full bg-[#161a1d] text-white flex items-center justify-center text-sm font-semibold font-serif">
@@ -255,14 +263,14 @@ export function AccountsPage() {
                       </div>
                     )}
                     <div>
-                      <h3 className="text-sm font-semibold text-[#161a1d]">
+                      <h3 className="text-sm font-semibold text-[#161a1d] dark:text-white">
                         {channel.name}
                       </h3>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-xs text-[#6b706f]">
+                        <span className="text-xs text-[#6b706f] dark:text-zinc-500">
                           {providerInfo.label}
                         </span>
-                        <span className="text-[#c9c5bb]">•</span>
+                        <span className="text-[#c9c5bb] dark:text-zinc-600">•</span>
                         <span className="text-[11px] font-mono text-[#24613b] font-medium">
                           Assigned
                         </span>
@@ -272,7 +280,7 @@ export function AccountsPage() {
                 </div>
 
                 <div className="pt-3 border-t border-[#e8e6df] flex items-center justify-between text-xs">
-                  <span className="text-[11px] text-[#6b706f]">
+                  <span className="text-[11px] text-[#6b706f] dark:text-zinc-500">
                     ID:{" "}
                     <code className="font-mono">
                       {channel.postizIntegrationId.slice(0, 10)}...
@@ -284,7 +292,7 @@ export function AccountsPage() {
                       <button
                         onClick={() => handleRemove(channel.id)}
                         disabled={isRemoving}
-                        className="text-[#6b706f] hover:text-[#161a1d] transition-colors cursor-pointer text-xs underline"
+                        className="text-[#6b706f] dark:text-zinc-500 hover:text-[#161a1d] dark:text-white transition-colors cursor-pointer text-xs underline"
                         title="Remove assignment from this workspace"
                       >
                         Remove from Workspace
@@ -292,7 +300,7 @@ export function AccountsPage() {
                       <button
                         onClick={() => setDisconnectConfirmChannel(channel)}
                         disabled={isDisconnecting}
-                        className="p-1 rounded text-[#6b706f] hover:text-[#b23a24] hover:bg-[#fbeeed] transition-colors cursor-pointer"
+                        className="p-1 rounded text-[#6b706f] dark:text-zinc-500 hover:text-[#b23a24] dark:text-[#e05a3a] hover:bg-[#fbeeed] transition-colors cursor-pointer"
                         title="Permanently disconnect provider from engine"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -309,30 +317,30 @@ export function AccountsPage() {
       {/* Modal 1: Assign Integration from Organization */}
       {isAssignModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#161a1d]/40 flex items-center justify-center p-4">
-          <div className="bg-[#faf9f5] border border-[#c9c5bb] rounded max-w-lg w-full p-6 space-y-4 shadow-lg">
-            <div className="flex items-center justify-between border-b border-[#c9c5bb] pb-3">
+          <div className="bg-[#faf9f5] dark:bg-[#1c1c1f] border border-[#c9c5bb] dark:border-white/[0.08] rounded max-w-lg w-full p-6 space-y-4 shadow-lg">
+            <div className="flex items-center justify-between border-b border-[#c9c5bb] dark:border-white/[0.08] pb-3">
               <div>
-                <h3 className="text-base font-semibold text-[#161a1d]">
+                <h3 className="text-base font-semibold text-[#161a1d] dark:text-white">
                   Assign Account from Organization
                 </h3>
-                <p className="text-xs text-[#6b706f]">
+                <p className="text-xs text-[#6b706f] dark:text-zinc-500">
                   Select a connected Postiz integration for this workspace.
                 </p>
               </div>
               <button
                 onClick={() => setIsAssignModalOpen(false)}
-                className="text-[#6b706f] hover:text-[#161a1d] text-lg font-bold"
+                className="text-[#6b706f] dark:text-zinc-500 hover:text-[#161a1d] dark:text-white text-lg font-bold"
               >
                 ×
               </button>
             </div>
 
             {isLoadingAvailable ? (
-              <div className="py-8 text-center text-xs font-mono text-[#6b706f]">
+              <div className="py-8 text-center text-xs font-mono text-[#6b706f] dark:text-zinc-500">
                 Fetching available organization integrations...
               </div>
             ) : availableChannels.length === 0 ? (
-              <div className="py-6 text-center text-xs text-[#6b706f] space-y-2">
+              <div className="py-6 text-center text-xs text-[#6b706f] dark:text-zinc-500 space-y-2">
                 <p>
                   No social accounts have been connected in the organization
                   Postiz instance yet.
@@ -354,7 +362,7 @@ export function AccountsPage() {
                   return (
                     <div
                       key={item.id}
-                      className="p-3 rounded border border-[#c9c5bb] bg-white flex items-center justify-between text-xs"
+                      className="p-3 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-white flex items-center justify-between text-xs"
                     >
                       <div className="flex items-center gap-2.5">
                         {item.pictureUrl ? (
@@ -369,10 +377,10 @@ export function AccountsPage() {
                           </div>
                         )}
                         <div>
-                          <p className="font-semibold text-[#161a1d]">
+                          <p className="font-semibold text-[#161a1d] dark:text-white">
                             {item.name}
                           </p>
-                          <p className="text-[11px] text-[#6b706f]">
+                          <p className="text-[11px] text-[#6b706f] dark:text-zinc-500">
                             {providerInfo.label}
                           </p>
                         </div>
@@ -416,33 +424,33 @@ export function AccountsPage() {
       {/* Modal 2: Connect New Account (OAuth) */}
       {isConnectModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#161a1d]/40 flex items-center justify-center p-4">
-          <div className="bg-[#faf9f5] border border-[#c9c5bb] rounded max-w-md w-full p-6 space-y-4 shadow-lg">
-            <div className="flex items-center justify-between border-b border-[#c9c5bb] pb-3">
+          <div className="bg-[#faf9f5] dark:bg-[#1c1c1f] border border-[#c9c5bb] dark:border-white/[0.08] rounded max-w-md w-full p-6 space-y-4 shadow-lg">
+            <div className="flex items-center justify-between border-b border-[#c9c5bb] dark:border-white/[0.08] pb-3">
               <div>
-                <h3 className="text-base font-semibold text-[#161a1d]">
+                <h3 className="text-base font-semibold text-[#161a1d] dark:text-white">
                   Connect Provider via OAuth
                 </h3>
-                <p className="text-xs text-[#6b706f]">
+                <p className="text-xs text-[#6b706f] dark:text-zinc-500">
                   Initiate official OAuth connection with Postiz publishing
                   engine.
                 </p>
               </div>
               <button
                 onClick={() => setIsConnectModalOpen(false)}
-                className="text-[#6b706f] hover:text-[#161a1d] text-lg font-bold"
+                className="text-[#6b706f] dark:text-zinc-500 hover:text-[#161a1d] dark:text-white text-lg font-bold"
               >
                 ×
               </button>
             </div>
 
             <div className="space-y-3">
-              <label className="text-xs font-semibold text-[#4c5359]">
+              <label className="text-xs font-semibold text-[#4c5359] dark:text-zinc-400">
                 Select Social Provider:
               </label>
               <select
                 value={selectedProvider}
                 onChange={(e) => setSelectedProvider(e.target.value)}
-                className="w-full h-9 px-3 text-xs rounded border border-[#c9c5bb] bg-white text-[#161a1d] focus:outline-none focus:ring-1 focus:ring-[#161a1d]"
+                className="w-full h-9 px-3 text-xs rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-white text-[#161a1d] dark:text-white focus:outline-none focus:ring-1 focus:ring-[#161a1d]"
               >
                 <option value="linkedin-page">LinkedIn Company Page</option>
                 <option value="linkedin">LinkedIn Member Profile</option>
@@ -455,8 +463,8 @@ export function AccountsPage() {
                 <option value="reddit">Reddit</option>
               </select>
 
-              <div className="p-3 rounded bg-[#f4f2ec] border border-[#d4d0c5] text-xs text-[#6b706f] space-y-1">
-                <p className="font-semibold text-[#161a1d]">
+              <div className="p-3 rounded bg-[#f4f2ec] dark:bg-white/[0.04] border border-[#d4d0c5] text-xs text-[#6b706f] dark:text-zinc-500 space-y-1">
+                <p className="font-semibold text-[#161a1d] dark:text-white">
                   Single-Organization OAuth Contract:
                 </p>
                 <p>
@@ -491,20 +499,20 @@ export function AccountsPage() {
       {/* Modal 3: Disconnect Confirmation */}
       {disconnectConfirmChannel && (
         <div className="fixed inset-0 z-50 bg-[#161a1d]/40 flex items-center justify-center p-4">
-          <div className="bg-[#faf9f5] border border-[#b23a24]/30 rounded max-w-md w-full p-6 space-y-4 shadow-lg">
-            <div className="flex items-center gap-3 text-[#b23a24]">
+          <div className="bg-[#faf9f5] dark:bg-[#1c1c1f] border border-[#b23a24]/30 rounded max-w-md w-full p-6 space-y-4 shadow-lg">
+            <div className="flex items-center gap-3 text-[#b23a24] dark:text-[#e05a3a]">
               <AlertTriangle className="h-6 w-6 shrink-0" />
-              <h3 className="text-base font-semibold text-[#161a1d]">
+              <h3 className="text-base font-semibold text-[#161a1d] dark:text-white">
                 Disconnect Social Account?
               </h3>
             </div>
 
-            <p className="text-xs text-[#4c5359] leading-relaxed">
+            <p className="text-xs text-[#4c5359] dark:text-zinc-400 leading-relaxed">
               Are you sure you want to permanently disconnect{" "}
               <strong>{disconnectConfirmChannel.name}</strong> from the
               publishing engine?
             </p>
-            <p className="text-xs text-[#b23a24] font-medium leading-relaxed">
+            <p className="text-xs text-[#b23a24] dark:text-[#e05a3a] font-medium leading-relaxed">
               This will remove the credentials from Postiz and unlink this
               channel from all SociaMesh workspaces.
             </p>

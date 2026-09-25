@@ -17,6 +17,7 @@ import { useMediaList } from "../hooks/useMedia.js";
 import { useChannels } from "../hooks/useChannels.js";
 import { usePublishingStatus } from "../hooks/usePublishingStatus.js";
 import { Button } from "../components/ui/Button.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
 import { Badge, type BadgeVariant } from "../components/ui/Badge.js";
 import { EmptyState } from "../components/ui/EmptyState.js";
 import type { PostStatus } from "../api/types.js";
@@ -52,20 +53,36 @@ export function OverviewPage() {
     useMediaList(workspaceId);
   const { channels = [], isLoading: channelsLoading } =
     useChannels(workspaceId);
-  const {
-    isConnected: isEngineConnected,
-    latencyMs,
-    status: engineStatus,
-  } = usePublishingStatus();
+  const { isConnected: isEngineConnected } = usePublishingStatus();
 
   if (wsLoading || postsLoading || mediaLoading || channelsLoading) {
     return (
-      <div className="p-6 md:p-8 space-y-6 animate-pulse">
-        <div className="h-8 bg-[#e8e6df] rounded w-1/3"></div>
+      <div className="p-4 sm:p-6 md:p-8 max-w-6xl w-full mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48 sm:w-64" />
+            <Skeleton className="h-4 w-60 sm:w-80" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-28" />
+            <Skeleton className="h-8 w-28" />
+          </div>
+        </div>
+
+        {/* Banner Skeleton */}
+        <Skeleton className="h-20 w-full rounded border border-[#c9c5bb] dark:border-white/[0.08]" />
+
+        {/* Stats Grid Skeleton */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-[#e8e6df] rounded"></div>
+            <Skeleton key={i} className="h-28 rounded border border-[#c9c5bb] dark:border-white/[0.08]" />
           ))}
+        </div>
+
+        {/* Recent Posts Skeleton */}
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-48 w-full rounded border border-[#c9c5bb] dark:border-white/[0.08]" />
         </div>
       </div>
     );
@@ -77,17 +94,17 @@ export function OverviewPage() {
   const failed = posts.filter((p) => p.status === "FAILED");
 
   return (
-    <div className="p-6 md:p-8 max-w-6xl w-full mx-auto space-y-8">
+    <div className="p-4 sm:p-6 md:p-8 max-w-6xl w-full mx-auto space-y-6 sm:space-y-8">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-[#c9c5bb]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-serif font-bold text-[#161a1d]">
+            <h1 className="text-2xl font-serif font-bold text-[#161a1d] dark:text-white">
               {workspace?.name}
             </h1>
             {workspace?.role && <Badge variant="owner">{workspace.role}</Badge>}
           </div>
-          <p className="text-xs text-[#6b706f] mt-1">
+          <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-1">
             Publishing overview and workspace performance • Timezone:{" "}
             {workspace?.timezone || "UTC"}
           </p>
@@ -109,11 +126,11 @@ export function OverviewPage() {
         </div>
       </div>
 
-      {/* Publishing Engine Status Banner */}
+      {/* Publishing Status Banner */}
       <div
         className={`p-4 rounded border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
           isEngineConnected
-            ? "border-[#c9c5bb] bg-[#faf9f5]"
+            ? "border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f]"
             : "border-[#f4c6bf] bg-[#fbeeed]"
         }`}
       >
@@ -121,113 +138,110 @@ export function OverviewPage() {
           {isEngineConnected ? (
             <ShieldCheck className="h-5 w-5 text-[#24613b] shrink-0 mt-0.5" />
           ) : (
-            <AlertCircle className="h-5 w-5 text-[#b23a24] shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-[#b23a24] dark:text-[#e05a3a] shrink-0 mt-0.5" />
           )}
           <div>
-            <div className="flex items-center gap-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-[#161a1d]">
-                {isEngineConnected
-                  ? "Publishing Engine Connected"
-                  : "Publishing Temporarily Unavailable"}
-              </h4>
-              {isEngineConnected && latencyMs !== undefined && (
-                <span className="text-[10px] font-mono text-[#6b706f]">
-                  ({latencyMs}ms)
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-[#4c5359] mt-0.5">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[#161a1d] dark:text-white">
               {isEngineConnected
-                ? "Direct Postiz REST backend is responsive. Social publishing and scheduling are operational."
-                : "Postiz service is currently unreachable. SociaMesh local drafts and media uploads remain functional."}
+                ? "Publishing & Scheduling Ready"
+                : "Publishing Temporarily Paused"}
+            </h4>
+            <p className="text-xs text-[#4c5359] dark:text-zinc-400 mt-0.5">
+              {isEngineConnected
+                ? "All social channels are connected and ready. Your scheduled posts will publish automatically."
+                : "Publishing to social channels is temporarily unavailable. Your drafts and media remain safely saved."}
             </p>
           </div>
         </div>
 
         <div className="shrink-0 flex items-center gap-2">
           <span
-            className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+            className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${
               isEngineConnected
                 ? "bg-[#e9f2eb] text-[#24613b] border-[#c5e0cb]"
-                : "bg-[#fbeeed] text-[#b23a24] border-[#f4c6bf]"
+                : "bg-[#fbeeed] text-[#b23a24] dark:text-[#e05a3a] border-[#f4c6bf]"
             }`}
           >
-            {isEngineConnected ? "Engine Online" : "Engine Offline"}
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isEngineConnected ? "bg-[#24613b]" : "bg-[#b23a24]"
+              }`}
+            />
+            {isEngineConnected ? "Operational" : "Temporarily Offline"}
           </span>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#e8e6df] text-[#4c5359] border border-[#c9c5bb]">
-            Neon DB
-          </span>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#e8e6df] text-[#4c5359] border border-[#c9c5bb]">
-            R2 Active
-          </span>
+          {isEngineConnected && (
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-[#f4f2ec] dark:bg-white/[0.04] text-[#4c5359] dark:text-zinc-400 border border-[#c9c5bb] dark:border-white/[0.08]">
+              Auto-Publish Enabled
+            </span>
+          )}
         </div>
       </div>
 
       {/* Real Statistics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1: Drafts */}
-        <div className="p-4 rounded border border-[#c9c5bb] bg-[#faf9f5]">
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#6b706f]">
+        <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f]">
+          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#6b706f] dark:text-zinc-500">
             <span>Active Drafts</span>
-            <PenSquare className="h-4 w-4 text-[#6b706f]" />
+            <PenSquare className="h-4 w-4 text-[#6b706f] dark:text-zinc-500" />
           </div>
-          <p className="text-3xl font-serif font-bold text-[#161a1d] mt-2">
+          <p className="text-3xl font-serif font-bold text-[#161a1d] dark:text-white mt-2">
             {drafts.length}
           </p>
           <Link
             to={`/app/${workspaceId}/posts`}
-            className="text-xs text-[#161a1d] font-medium hover:underline inline-flex items-center gap-1 mt-2"
+            className="text-xs text-[#161a1d] dark:text-white font-medium hover:underline inline-flex items-center gap-1 mt-2"
           >
             View drafts <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Metric 2: Scheduled */}
-        <div className="p-4 rounded border border-[#c9c5bb] bg-[#faf9f5]">
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#6b706f]">
+        <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f]">
+          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#6b706f] dark:text-zinc-500">
             <span>Scheduled Posts</span>
-            <Calendar className="h-4 w-4 text-[#6b706f]" />
+            <Calendar className="h-4 w-4 text-[#6b706f] dark:text-zinc-500" />
           </div>
-          <p className="text-3xl font-serif font-bold text-[#161a1d] mt-2">
+          <p className="text-3xl font-serif font-bold text-[#161a1d] dark:text-white mt-2">
             {scheduled.length}
           </p>
           <Link
             to={`/app/${workspaceId}/calendar`}
-            className="text-xs text-[#161a1d] font-medium hover:underline inline-flex items-center gap-1 mt-2"
+            className="text-xs text-[#161a1d] dark:text-white font-medium hover:underline inline-flex items-center gap-1 mt-2"
           >
             View calendar <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Metric 3: Published */}
-        <div className="p-4 rounded border border-[#c9c5bb] bg-[#faf9f5]">
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#6b706f]">
+        <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f]">
+          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#6b706f] dark:text-zinc-500">
             <span>Published</span>
-            <Send className="h-4 w-4 text-[#6b706f]" />
+            <Send className="h-4 w-4 text-[#6b706f] dark:text-zinc-500" />
           </div>
-          <p className="text-3xl font-serif font-bold text-[#161a1d] mt-2">
+          <p className="text-3xl font-serif font-bold text-[#161a1d] dark:text-white mt-2">
             {published.length}
           </p>
           <Link
             to={`/app/${workspaceId}/posts`}
-            className="text-xs text-[#161a1d] font-medium hover:underline inline-flex items-center gap-1 mt-2"
+            className="text-xs text-[#161a1d] dark:text-white font-medium hover:underline inline-flex items-center gap-1 mt-2"
           >
             View published <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Metric 4: Assigned Channels */}
-        <div className="p-4 rounded border border-[#c9c5bb] bg-[#faf9f5]">
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#6b706f]">
+        <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f]">
+          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#6b706f] dark:text-zinc-500">
             <span>Assigned Channels</span>
-            <Share2 className="h-4 w-4 text-[#6b706f]" />
+            <Share2 className="h-4 w-4 text-[#6b706f] dark:text-zinc-500" />
           </div>
-          <p className="text-3xl font-serif font-bold text-[#161a1d] mt-2">
+          <p className="text-3xl font-serif font-bold text-[#161a1d] dark:text-white mt-2">
             {channels.length}
           </p>
           <Link
             to={`/app/${workspaceId}/accounts`}
-            className="text-xs text-[#161a1d] font-medium hover:underline inline-flex items-center gap-1 mt-2"
+            className="text-xs text-[#161a1d] dark:text-white font-medium hover:underline inline-flex items-center gap-1 mt-2"
           >
             Manage channels <ArrowRight className="h-3 w-3" />
           </Link>
@@ -237,12 +251,12 @@ export function OverviewPage() {
       {/* Recent Publications Section */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-serif font-bold text-[#161a1d]">
+          <h2 className="text-base font-serif font-bold text-[#161a1d] dark:text-white">
             Recent Publications & Drafts
           </h2>
           <Link
             to={`/app/${workspaceId}/posts`}
-            className="text-xs text-[#6b706f] hover:text-[#161a1d]"
+            className="text-xs text-[#6b706f] dark:text-zinc-500 hover:text-[#161a1d] dark:text-white"
           >
             View all ({posts.length})
           </Link>
@@ -260,7 +274,7 @@ export function OverviewPage() {
             }
           />
         ) : (
-          <div className="divide-y divide-[#c9c5bb] border border-[#c9c5bb] rounded bg-[#faf9f5]">
+          <div className="divide-y divide-[#c9c5bb] border border-[#c9c5bb] dark:border-white/[0.08] rounded bg-[#faf9f5] dark:bg-[#1c1c1f]">
             {posts.slice(0, 5).map((post) => (
               <div
                 key={post.id}
@@ -279,21 +293,21 @@ export function OverviewPage() {
                       </span>
                     )}
 
-                    <span className="text-[11px] text-[#6b706f] flex items-center gap-1 font-mono">
+                    <span className="text-[11px] text-[#6b706f] dark:text-zinc-500 flex items-center gap-1 font-mono">
                       <Clock className="h-3 w-3" />
                       {new Date(post.createdAt).toLocaleDateString()}
                     </span>
                   </div>
 
-                  <p className="text-sm text-[#161a1d] truncate font-medium">
+                  <p className="text-sm text-[#161a1d] dark:text-white truncate font-medium">
                     {post.content}
                   </p>
 
                   {post.targets && post.targets.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1 text-[11px] text-[#6b706f]">
+                    <div className="flex items-center gap-1 mt-1 text-[11px] text-[#6b706f] dark:text-zinc-500">
                       <span>Channels:</span>
                       {post.targets.map((t) => (
-                        <span key={t.id} className="font-mono text-[#161a1d]">
+                        <span key={t.id} className="font-mono text-[#161a1d] dark:text-white">
                           {t.channel?.name || "Channel"}
                         </span>
                       ))}

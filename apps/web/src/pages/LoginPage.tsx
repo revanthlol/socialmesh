@@ -29,22 +29,22 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#f2f0e9]">
-      <div className="w-full max-w-sm border-t-4 border-[#161a1d] bg-[#faf9f5] border border-[#c9c5bb] p-6 md:p-8 shadow-sm rounded-sm">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#f2f0e9] dark:bg-[#0d0d0f]">
+      <div className="w-full max-w-sm border-t-4 border-[#161a1d] bg-[#faf9f5] dark:bg-[#1c1c1f] border border-[#c9c5bb] dark:border-white/[0.08] p-6 md:p-8 shadow-sm rounded-sm">
         <div className="mb-6">
-          <p className="text-[11px] font-mono font-bold tracking-widest text-[#b23a24] uppercase">
+          <p className="text-[11px] font-mono font-bold tracking-widest text-[#b23a24] dark:text-[#e05a3a] uppercase">
             SociaMesh Auth
           </p>
-          <h1 className="text-2xl font-serif font-semibold text-[#161a1d] mt-1">
+          <h1 className="text-2xl font-serif font-semibold text-[#161a1d] dark:text-white mt-1">
             Sign In
           </h1>
-          <p className="text-xs text-[#6b706f] mt-1">
+          <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-1">
             Access your social publishing workspaces.
           </p>
         </div>
 
         {errorMessage && (
-          <div className="mb-4 p-2.5 rounded bg-[#fbeeed] border border-[#f4c6bf] text-xs text-[#b23a24]">
+          <div className="mb-4 p-2.5 rounded bg-[#fbeeed] border border-[#f4c6bf] text-xs text-[#b23a24] dark:text-[#e05a3a]">
             {errorMessage}
           </div>
         )}
@@ -75,11 +75,11 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-[#c9c5bb] text-center text-xs text-[#6b706f]">
+        <div className="mt-6 pt-4 border-t border-[#c9c5bb] dark:border-white/[0.08] text-center text-xs text-[#6b706f] dark:text-zinc-500">
           Don't have an account?{" "}
           <Link
             to="/register"
-            className="font-semibold text-[#161a1d] underline hover:text-[#b23a24]"
+            className="font-semibold text-[#161a1d] dark:text-white underline hover:text-[#b23a24] dark:text-[#e05a3a]"
           >
             Create Workspace
           </Link>

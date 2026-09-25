@@ -77,26 +77,26 @@ export function OAuthCallbackPage() {
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
-      <div className="max-w-md w-full p-6 rounded border border-[#c9c5bb] bg-[#faf9f5] space-y-4 text-center">
+      <div className="max-w-md w-full p-6 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-4 text-center">
         {isProcessing ? (
           <div className="space-y-3">
             <div className="h-8 w-8 border-2 border-[#161a1d] border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <h2 className="text-base font-semibold text-[#161a1d]">
+            <h2 className="text-base font-semibold text-[#161a1d] dark:text-white">
               Completing Account Connection
             </h2>
-            <p className="text-xs text-[#6b706f]">
+            <p className="text-xs text-[#6b706f] dark:text-zinc-500">
               Synchronizing authorization tokens with the publishing engine...
             </p>
           </div>
         ) : errorMessage ? (
           <div className="space-y-3">
-            <div className="h-10 w-10 rounded-full bg-[#fbeeed] text-[#b23a24] flex items-center justify-center mx-auto">
+            <div className="h-10 w-10 rounded-full bg-[#fbeeed] text-[#b23a24] dark:text-[#e05a3a] flex items-center justify-center mx-auto">
               <AlertCircle className="h-5 w-5" />
             </div>
-            <h2 className="text-base font-semibold text-[#161a1d]">
+            <h2 className="text-base font-semibold text-[#161a1d] dark:text-white">
               Connection Incomplete
             </h2>
-            <p className="text-xs text-[#6b706f] leading-relaxed">
+            <p className="text-xs text-[#6b706f] dark:text-zinc-500 leading-relaxed">
               Provider OAuth authorization could not be completed:{" "}
               {errorMessage}
             </p>
@@ -109,10 +109,10 @@ export function OAuthCallbackPage() {
             <div className="h-10 w-10 rounded-full bg-[#e9f2eb] text-[#24613b] flex items-center justify-center mx-auto">
               <CheckCircle2 className="h-5 w-5" />
             </div>
-            <h2 className="text-base font-semibold text-[#161a1d]">
+            <h2 className="text-base font-semibold text-[#161a1d] dark:text-white">
               Provider Connected
             </h2>
-            <p className="text-xs text-[#6b706f] leading-relaxed">
+            <p className="text-xs text-[#6b706f] dark:text-zinc-500 leading-relaxed">
               Your social account authorization has returned to SociaMesh. You
               can now assign this channel to your workspace.
             </p>

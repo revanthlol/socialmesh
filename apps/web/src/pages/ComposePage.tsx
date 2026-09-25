@@ -18,6 +18,7 @@ import { useMediaList } from "../hooks/useMedia.js";
 import { useChannels } from "../hooks/useChannels.js";
 import { usePublishingStatus } from "../hooks/usePublishingStatus.js";
 import { Button } from "../components/ui/Button.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
 import { Textarea } from "../components/ui/Textarea.js";
 import { Input } from "../components/ui/Input.js";
 import { Badge } from "../components/ui/Badge.js";
@@ -251,8 +252,10 @@ export function ComposePage() {
 
   if (editPostId && postLoading) {
     return (
-      <div className="p-8 text-center text-xs font-mono text-[#6b706f]">
-        Loading draft details...
+      <div className="p-4 sm:p-6 md:p-8 max-w-4xl w-full mx-auto space-y-6">
+        <Skeleton className="h-8 w-60" />
+        <Skeleton className="h-28 w-full rounded border border-[#c9c5bb] dark:border-white/[0.08]" />
+        <Skeleton className="h-44 w-full rounded border border-[#c9c5bb] dark:border-white/[0.08]" />
       </div>
     );
   }
@@ -260,27 +263,21 @@ export function ComposePage() {
   const isBusy = isCreating || isUpdating || isPublishing || isSchedulePending;
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl w-full mx-auto space-y-6">
+    <div className="p-4 sm:p-6 md:p-8 max-w-4xl w-full mx-auto space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#c9c5bb]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-serif font-bold text-[#161a1d]">
+            <h1 className="text-2xl font-serif font-bold text-[#161a1d] dark:text-white">
               {editPostId ? "Edit Publication" : "Compose Publication"}
             </h1>
-            {isEngineConnected ? (
-              <Badge variant="published">Engine Ready</Badge>
-            ) : (
-              <Badge variant="warning">Offline Mode</Badge>
-            )}
+
           </div>
-          <p className="text-xs text-[#6b706f] mt-1">
+          <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-1">
             Author and refine post copy, attach media, select workspace
             channels, and publish.
           </p>
         </div>
-
-        <Badge variant="draft">Editorial Composer</Badge>
       </div>
 
       {statusMessage && (
@@ -288,7 +285,7 @@ export function ComposePage() {
           className={`p-3 rounded text-xs flex items-center justify-between border ${
             statusMessage.type === "success"
               ? "bg-[#e9f2eb] text-[#24613b] border-[#c5e0cb]"
-              : "bg-[#fbeeed] text-[#b23a24] border-[#f4c6bf]"
+              : "bg-[#fbeeed] text-[#b23a24] dark:text-[#e05a3a] border-[#f4c6bf]"
           }`}
         >
           <div className="flex items-center gap-2">
@@ -310,39 +307,37 @@ export function ComposePage() {
 
       {/* Offline Notice banner if publishing engine is down */}
       {!isEngineConnected && (
-        <div className="p-3 rounded border border-[#f4c6bf] bg-[#fbeeed] text-xs text-[#b23a24] flex items-center gap-2">
+        <div className="p-3 rounded border border-[#f4c6bf] bg-[#fbeeed] text-xs text-[#b23a24] dark:text-[#e05a3a] flex items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>
-            Publishing engine is offline. You can save drafts locally, but
-            immediate publishing and scheduling are disabled until the engine
-            reconnects.
+            Publishing services are temporarily offline. You can save drafts locally, and publishing will resume once the service reconnects.
           </span>
         </div>
       )}
 
       <div className="space-y-6">
         {/* Workspace Channels Picker */}
-        <div className="p-4 rounded border border-[#c9c5bb] bg-[#faf9f5] space-y-3">
+        <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] dark:text-zinc-400 flex items-center gap-2">
               <Share2 className="h-3.5 w-3.5" /> Target Workspace Channels (
               {selectedChannelIds.length} selected)
             </span>
             <button
               type="button"
               onClick={() => navigate(`/app/${workspaceId}/accounts`)}
-              className="text-[11px] text-[#6b706f] hover:text-[#161a1d] underline cursor-pointer"
+              className="text-[11px] text-[#6b706f] dark:text-zinc-500 hover:text-[#161a1d] dark:text-white underline cursor-pointer"
             >
               Manage Channels
             </button>
           </div>
 
           {channelsLoading ? (
-            <p className="text-xs font-mono text-[#6b706f]">
+            <p className="text-xs font-mono text-[#6b706f] dark:text-zinc-500">
               Loading channels...
             </p>
           ) : channels.length === 0 ? (
-            <div className="p-3 rounded border border-dashed border-[#c9c5bb] bg-white text-xs text-[#6b706f] flex items-center justify-between">
+            <div className="p-3 rounded border border-dashed border-[#c9c5bb] dark:border-white/[0.08] bg-white text-xs text-[#6b706f] dark:text-zinc-500 flex items-center justify-between">
               <span>No channels assigned to this workspace yet.</span>
               <Button
                 variant="outline"
@@ -365,7 +360,7 @@ export function ComposePage() {
                     className={`px-3 py-1.5 rounded border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
                       isSelected
                         ? "bg-[#161a1d] text-white border-[#161a1d]"
-                        : "bg-white text-[#4c5359] border-[#c9c5bb] hover:border-[#161a1d]"
+                        : "bg-white text-[#4c5359] dark:text-zinc-400 border-[#c9c5bb] dark:border-white/[0.08] hover:border-[#161a1d]"
                     }`}
                   >
                     {ch.pictureUrl ? (
@@ -391,10 +386,10 @@ export function ComposePage() {
         {/* Content Textarea */}
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <label className="text-xs font-semibold uppercase tracking-wider text-[#4c5359]">
+            <label className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] dark:text-zinc-400">
               Publication Copy
             </label>
-            <span className="text-xs font-mono text-[#6b706f]">
+            <span className="text-xs font-mono text-[#6b706f] dark:text-zinc-500">
               {content.length} characters
             </span>
           </div>
@@ -410,7 +405,7 @@ export function ComposePage() {
         {/* Attached Media Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] dark:text-zinc-400 flex items-center gap-2">
               <ImageIcon className="h-3.5 w-3.5" /> Attached Media (
               {selectedMedia.length})
             </span>
@@ -432,7 +427,7 @@ export function ComposePage() {
               {selectedMedia.map((asset) => (
                 <div
                   key={asset.id}
-                  className="relative rounded border border-[#c9c5bb] bg-white overflow-hidden aspect-video group"
+                  className="relative rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-white overflow-hidden aspect-video group"
                 >
                   {asset.kind === "IMAGE" && asset.viewUrl ? (
                     <img
@@ -441,7 +436,7 @@ export function ComposePage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-[#f2f0e9] text-xs font-mono text-[#6b706f]">
+                    <div className="w-full h-full flex items-center justify-center bg-[#f2f0e9] dark:bg-[#0d0d0f] text-xs font-mono text-[#6b706f] dark:text-zinc-500">
                       {asset.originalName}
                     </div>
                   )}
@@ -460,18 +455,18 @@ export function ComposePage() {
 
           {/* Inline Media Library Picker Drawer */}
           {isMediaPickerOpen && (
-            <div className="p-4 rounded border border-[#c9c5bb] bg-[#faf9f5] space-y-3">
-              <div className="flex items-center justify-between border-b border-[#c9c5bb] pb-2">
-                <span className="text-xs font-medium text-[#161a1d]">
+            <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-3">
+              <div className="flex items-center justify-between border-b border-[#c9c5bb] dark:border-white/[0.08] pb-2">
+                <span className="text-xs font-medium text-[#161a1d] dark:text-white">
                   Select media assets to attach:
                 </span>
-                <span className="text-[11px] font-mono text-[#6b706f]">
+                <span className="text-[11px] font-mono text-[#6b706f] dark:text-zinc-500">
                   {mediaLibrary.length} available in library
                 </span>
               </div>
 
               {mediaLibrary.length === 0 ? (
-                <p className="text-xs text-[#6b706f] py-4 text-center">
+                <p className="text-xs text-[#6b706f] dark:text-zinc-500 py-4 text-center">
                   No media uploaded yet. Visit the Media Library to upload
                   images or videos.
                 </p>
@@ -488,7 +483,7 @@ export function ComposePage() {
                         className={`relative aspect-square rounded border cursor-pointer overflow-hidden transition-all ${
                           isSelected
                             ? "border-[#161a1d] ring-2 ring-[#161a1d]"
-                            : "border-[#c9c5bb] hover:border-[#161a1d]"
+                            : "border-[#c9c5bb] dark:border-white/[0.08] hover:border-[#161a1d]"
                         }`}
                       >
                         {asset.viewUrl ? (
@@ -498,7 +493,7 @@ export function ComposePage() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-[#e8e6df] text-[10px] text-[#6b706f]">
+                          <div className="w-full h-full flex items-center justify-center bg-[#e8e6df] text-[10px] text-[#6b706f] dark:text-zinc-500">
                             {asset.kind}
                           </div>
                         )}
@@ -519,18 +514,18 @@ export function ComposePage() {
         </div>
 
         {/* Scheduling Section */}
-        <div className="p-4 rounded border border-[#c9c5bb] bg-[#faf9f5] space-y-3">
+        <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] flex items-center gap-2 cursor-pointer">
+            <label className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] dark:text-zinc-400 flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={isScheduling}
                 onChange={(e) => setIsScheduling(e.target.checked)}
-                className="rounded border-[#c9c5bb] text-[#161a1d]"
+                className="rounded border-[#c9c5bb] dark:border-white/[0.08] text-[#161a1d] dark:text-white"
               />
               Schedule for Later (Postiz / Temporal)
             </label>
-            <span className="text-[11px] font-mono text-[#6b706f]">
+            <span className="text-[11px] font-mono text-[#6b706f] dark:text-zinc-500">
               Workspace Timezone: UTC
             </span>
           </div>
@@ -548,7 +543,7 @@ export function ComposePage() {
         </div>
 
         {/* Action Controls Bar */}
-        <div className="pt-4 border-t border-[#c9c5bb] flex flex-wrap items-center justify-between gap-3">
+        <div className="pt-4 border-t border-[#c9c5bb] dark:border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
           <Button
             type="button"
             variant="ghost"

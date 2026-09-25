@@ -96,14 +96,14 @@ export function SettingsPage() {
   const isOwner = workspace?.role === "OWNER";
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl w-full mx-auto space-y-8">
+    <div className="p-4 sm:p-6 md:p-8 max-w-4xl w-full mx-auto space-y-6 sm:space-y-8">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-[#c9c5bb]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
         <div>
-          <h1 className="text-2xl font-serif font-bold text-[#161a1d]">
+          <h1 className="text-2xl font-serif font-bold text-[#161a1d] dark:text-white">
             Workspace Settings
           </h1>
-          <p className="text-xs text-[#6b706f] mt-1">
+          <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-1">
             Configure organization preferences, timezones, membership roles, and
             channel mapping.
           </p>
@@ -125,7 +125,7 @@ export function SettingsPage() {
           className={`p-3 rounded text-xs flex items-center justify-between border ${
             statusMessage.type === "success"
               ? "bg-[#e9f2eb] text-[#24613b] border-[#c5e0cb]"
-              : "bg-[#fbeeed] text-[#b23a24] border-[#f4c6bf]"
+              : "bg-[#fbeeed] text-[#b23a24] dark:text-[#e05a3a] border-[#f4c6bf]"
           }`}
         >
           <div className="flex items-center gap-2">
@@ -146,12 +146,12 @@ export function SettingsPage() {
       )}
 
       {/* General Settings Form */}
-      <section className="p-6 rounded border border-[#c9c5bb] bg-[#faf9f5] space-y-6">
+      <section className="p-6 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-6">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-[#161a1d] flex items-center gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-[#161a1d] dark:text-white flex items-center gap-2">
             <SettingsIcon className="h-4 w-4" /> General Configuration
           </h2>
-          <p className="text-xs text-[#6b706f] mt-0.5">
+          <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-0.5">
             Basic metadata used for social publication headers and scheduling
             timestamps.
           </p>
@@ -167,14 +167,14 @@ export function SettingsPage() {
           />
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-[#4c5359]">
+            <label className="text-xs font-semibold text-[#4c5359] dark:text-zinc-400">
               Timezone (IANA)
             </label>
             <select
               value={timezone}
               disabled={!isOwner}
               onChange={(e) => setTimezone(e.target.value)}
-              className="w-full h-9 px-3 text-xs rounded border border-[#c9c5bb] bg-white text-[#161a1d] focus:outline-none focus:ring-1 focus:ring-[#161a1d]"
+              className="w-full h-9 px-3 text-xs rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-white text-[#161a1d] dark:text-white focus:outline-none focus:ring-1 focus:ring-[#161a1d]"
             >
               {COMMON_TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>
@@ -182,7 +182,7 @@ export function SettingsPage() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-[#6b706f]">
+            <p className="text-[11px] text-[#6b706f] dark:text-zinc-500">
               Used to display scheduled publications and calendar timelines for
               this client.
             </p>
@@ -193,7 +193,7 @@ export function SettingsPage() {
               Save Changes
             </Button>
           ) : (
-            <p className="text-xs text-[#6b706f] italic">
+            <p className="text-xs text-[#6b706f] dark:text-zinc-500 italic">
               Only workspace Owners can modify general organization settings.
             </p>
           )}
@@ -201,14 +201,14 @@ export function SettingsPage() {
       </section>
 
       {/* Assigned Channels Summary */}
-      <section className="p-6 rounded border border-[#c9c5bb] bg-[#faf9f5] space-y-4">
+      <section className="p-6 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[#161a1d] flex items-center gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-[#161a1d] dark:text-white flex items-center gap-2">
               <Share2 className="h-4 w-4" /> Assigned Social Channels (
               {channels.length})
             </h2>
-            <p className="text-xs text-[#6b706f] mt-0.5">
+            <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-0.5">
               Publishing channels mapped to this workspace from the shared
               organization.
             </p>
@@ -223,7 +223,7 @@ export function SettingsPage() {
         {channelsLoading ? (
           <div className="h-10 bg-[#e8e6df] rounded animate-pulse"></div>
         ) : channels.length === 0 ? (
-          <p className="text-xs text-[#6b706f]">
+          <p className="text-xs text-[#6b706f] dark:text-zinc-500">
             No social channels assigned to this workspace yet.
           </p>
         ) : (
@@ -231,7 +231,7 @@ export function SettingsPage() {
             {channels.map((ch) => (
               <div
                 key={ch.id}
-                className="p-2.5 rounded border border-[#c9c5bb] bg-white flex items-center justify-between text-xs"
+                className="p-2.5 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-white flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-2">
                   {ch.pictureUrl ? (
@@ -243,11 +243,11 @@ export function SettingsPage() {
                   ) : (
                     <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
                   )}
-                  <span className="font-semibold text-[#161a1d]">
+                  <span className="font-semibold text-[#161a1d] dark:text-white">
                     {ch.name}
                   </span>
                 </div>
-                <span className="text-[10px] font-mono text-[#6b706f] uppercase">
+                <span className="text-[10px] font-mono text-[#6b706f] dark:text-zinc-500 uppercase">
                   {ch.provider}
                 </span>
               </div>
@@ -257,14 +257,14 @@ export function SettingsPage() {
       </section>
 
       {/* Membership & RBAC Section */}
-      <section className="p-6 rounded border border-[#c9c5bb] bg-[#faf9f5] space-y-4">
+      <section className="p-6 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[#161a1d] flex items-center gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-[#161a1d] dark:text-white flex items-center gap-2">
               <Users className="h-4 w-4" /> Team Members & Roles (
               {members.length})
             </h2>
-            <p className="text-xs text-[#6b706f] mt-0.5">
+            <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-0.5">
               Access control and role assignment for this workspace.
             </p>
           </div>
@@ -276,23 +276,23 @@ export function SettingsPage() {
             <div className="h-10 bg-[#e8e6df] rounded"></div>
           </div>
         ) : (
-          <div className="divide-y divide-[#c9c5bb] border border-[#c9c5bb] rounded bg-white">
+          <div className="divide-y divide-[#c9c5bb] border border-[#c9c5bb] dark:border-white/[0.08] rounded bg-white">
             {members.map((member) => (
               <div
                 key={member.membershipId}
                 className="p-3.5 flex items-center justify-between gap-4"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[#161a1d] truncate">
+                  <p className="text-sm font-semibold text-[#161a1d] dark:text-white truncate">
                     {member.displayName}
                   </p>
-                  <p className="text-xs text-[#6b706f] truncate">
+                  <p className="text-xs text-[#6b706f] dark:text-zinc-500 truncate">
                     {member.email}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-mono text-[#6b706f]">
+                  <span className="text-[11px] font-mono text-[#6b706f] dark:text-zinc-500">
                     Joined {new Date(member.joinedAt).toLocaleDateString()}
                   </span>
                   <Badge
@@ -310,14 +310,14 @@ export function SettingsPage() {
       {/* Create Workspace Modal */}
       {isCreatingModal && (
         <div className="fixed inset-0 z-50 bg-[#161a1d]/75 flex items-center justify-center p-4">
-          <div className="bg-[#faf9f5] rounded max-w-md w-full border border-[#c9c5bb] p-6 space-y-4 shadow-xl">
+          <div className="bg-[#faf9f5] dark:bg-[#1c1c1f] rounded max-w-md w-full border border-[#c9c5bb] dark:border-white/[0.08] p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-serif font-bold text-[#161a1d]">
+              <h3 className="text-base font-serif font-bold text-[#161a1d] dark:text-white">
                 Create New Workspace
               </h3>
               <button
                 onClick={() => setIsCreatingModal(false)}
-                className="text-[#6b706f] hover:text-[#161a1d] text-lg font-bold cursor-pointer"
+                className="text-[#6b706f] dark:text-zinc-500 hover:text-[#161a1d] dark:text-white text-lg font-bold cursor-pointer"
               >
                 ×
               </button>
