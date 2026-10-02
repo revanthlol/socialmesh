@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import {
   S3Client,
   type S3ClientConfig,
@@ -131,4 +132,93 @@ export async function deleteObjectFromR2(objectKey: string): Promise<void> {
       Key: objectKey,
     }),
   );
+}
+
+export interface DurableMediaPayload {
+  mediaAssetId: string;
+  workspaceId: string;
+  objectKey: string;
+  exp: number; // Unix timestamp in seconds
+}
+
+export function createDurableMediaToken(payload: DurableMediaPayload): string {
+  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", env.SESSION_SECRET)
+    .update(data)
+    .digest("base64url");
+  return `${data}.${signature}`;
+}
+
+export function verifyDurableMediaToken(
+  token: string,
+): DurableMediaPayload | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+    const [data, signature] = parts;
+    if (!data || !signature) return null;
+    const expectedSignature = crypto
+      .createHmac("sha256", env.SESSION_SECRET)
+      .update(data)
+      .digest("base64url");
+
+    const sigBuf = Buffer.from(signature, "utf-8");
+    const expBuf = Buffer.from(expectedSignature, "utf-8");
+    if (sigBuf.length !== expBuf.length) return null;
+    if (!crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return null;
+    }
+
+    const payload: DurableMediaPayload = JSON.parse(
+      Buffer.from(data, "base64url").toString("utf-8"),
+    );
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < nowSeconds) {
+      return null; // Expired
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export function createDurableMediaUrl(
+  workspaceId: string,
+  assetId: string,
+  objectKey: string,
+  filename: string,
+  targetDate?: Date,
+): string {
+  const baseTime = targetDate ? targetDate.getTime() : Date.now();
+  const expSeconds = Math.floor(baseTime / 1000) + 7 * 86400; // Target date + 7-day grace window
+
+  const token = createDurableMediaToken({
+    mediaAssetId: assetId,
+    workspaceId,
+    objectKey,
+    exp: expSeconds,
+  });
+
+  const safeFilename = encodeURIComponent(filename || "media.bin");
+  const baseUrl = (env.APP_BASE_URL || "http://localhost:4000").replace(
+    /\/$/,
+    "",
+  );
+  return `${baseUrl}/api/v1/media/durable/${token}/${safeFilename}`;
+}
+
+export async function getMediaObjectStream(objectKey: string) {
+  const command = new GetObjectCommand({
+    Bucket: env.R2_BUCKET_NAME,
+    Key: objectKey,
+  });
+  const res = await r2Client.send(command);
+  return {
+    body: res.Body,
+    contentType: res.ContentType,
+    contentLength: res.ContentLength,
+  };
 }

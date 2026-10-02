@@ -115,13 +115,13 @@ export function AccountsPage() {
     } catch (err: any) {
       setActionError(
         err.message ||
-          "Could not obtain connection URL from publishing engine. Verify provider credentials in Postiz.",
+          "Could not start the connection. Try again or contact your workspace administrator.",
       );
     }
   }
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 max-w-5xl w-full mx-auto space-y-6">
+    <div className="page-shell space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
         <div>
@@ -131,8 +131,7 @@ export function AccountsPage() {
             </h1>
           </div>
           <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-1">
-            Social publishing destinations assigned to this workspace from the
-            shared organization.
+            Manage the accounts this workspace can publish to.
           </p>
         </div>
 
@@ -280,12 +279,7 @@ export function AccountsPage() {
                 </div>
 
                 <div className="pt-3 border-t border-[#e8e6df] flex items-center justify-between text-xs">
-                  <span className="text-[11px] text-[#6b706f] dark:text-zinc-500">
-                    ID:{" "}
-                    <code className="font-mono">
-                      {channel.postizIntegrationId.slice(0, 10)}...
-                    </code>
-                  </span>
+                  <span className="text-[11px] text-[#6b706f] dark:text-zinc-500">Connected to this workspace</span>
 
                   {isOwner && (
                     <div className="flex items-center gap-2">
@@ -324,7 +318,7 @@ export function AccountsPage() {
                   Assign Account from Organization
                 </h3>
                 <p className="text-xs text-[#6b706f] dark:text-zinc-500">
-                  Select a connected Postiz integration for this workspace.
+                  Choose an account already connected to your organization.
                 </p>
               </div>
               <button
@@ -337,13 +331,12 @@ export function AccountsPage() {
 
             {isLoadingAvailable ? (
               <div className="py-8 text-center text-xs font-mono text-[#6b706f] dark:text-zinc-500">
-                Fetching available organization integrations...
+                  Finding connected accounts…
               </div>
             ) : availableChannels.length === 0 ? (
               <div className="py-6 text-center text-xs text-[#6b706f] dark:text-zinc-500 space-y-2">
                 <p>
-                  No social accounts have been connected in the organization
-                  Postiz instance yet.
+                  No social accounts are connected to your organization yet.
                 </p>
                 <Button
                   size="sm"
@@ -428,11 +421,10 @@ export function AccountsPage() {
             <div className="flex items-center justify-between border-b border-[#c9c5bb] dark:border-white/[0.08] pb-3">
               <div>
                 <h3 className="text-base font-semibold text-[#161a1d] dark:text-white">
-                  Connect Provider via OAuth
+                  Connect a social account
                 </h3>
                 <p className="text-xs text-[#6b706f] dark:text-zinc-500">
-                  Initiate official OAuth connection with Postiz publishing
-                  engine.
+                  Sign in with the social platform to authorize publishing.
                 </p>
               </div>
               <button
@@ -465,12 +457,10 @@ export function AccountsPage() {
 
               <div className="p-3 rounded bg-[#f4f2ec] dark:bg-white/[0.04] border border-[#d4d0c5] text-xs text-[#6b706f] dark:text-zinc-500 space-y-1">
                 <p className="font-semibold text-[#161a1d] dark:text-white">
-                  Single-Organization OAuth Contract:
+                  Organization access:
                 </p>
                 <p>
-                  Connecting a provider authorizes the shared Postiz
-                  installation. Once authorized, you can assign the channel to
-                  this workspace.
+                  A connected account can be assigned to this workspace after authorization.
                 </p>
               </div>
             </div>
@@ -508,13 +498,11 @@ export function AccountsPage() {
             </div>
 
             <p className="text-xs text-[#4c5359] dark:text-zinc-400 leading-relaxed">
-              Are you sure you want to permanently disconnect{" "}
-              <strong>{disconnectConfirmChannel.name}</strong> from the
-              publishing engine?
+              Disconnect{" "}
+              <strong>{disconnectConfirmChannel.name}</strong> from your connected accounts?
             </p>
             <p className="text-xs text-[#b23a24] dark:text-[#e05a3a] font-medium leading-relaxed">
-              This will remove the credentials from Postiz and unlink this
-              channel from all SociaMesh workspaces.
+              This account will be removed from every workspace that uses it.
             </p>
 
             <div className="pt-2 flex justify-end gap-2">

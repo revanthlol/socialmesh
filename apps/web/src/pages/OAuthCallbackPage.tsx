@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
@@ -17,9 +17,14 @@ export function OAuthCallbackPage() {
   const [resolvedWorkspaceId, setResolvedWorkspaceId] = useState<string | null>(
     paramWorkspaceId || null,
   );
-  const [errorMessage, setErrorMessage] = useState<string | null>(
-    searchParams.get("error") || searchParams.get("errorMessage") || null,
-  );
+  const [errorMessage, setErrorMessage] = useState<string | null>(() => {
+    const err = searchParams.get("error") || searchParams.get("errorMessage");
+    const desc = searchParams.get("error_description");
+    if (err && desc) return `${err}: ${desc}`;
+    return err || null;
+  });
+
+  const hasTriggeredRef = useRef(false);
 
   useEffect(() => {
     if (errorMessage) {
@@ -27,7 +32,21 @@ export function OAuthCallbackPage() {
       return;
     }
 
+    if (hasTriggeredRef.current) {
+      return;
+    }
+
     const stateParam = searchParams.get("state");
+    const codeParam = searchParams.get("code");
+    const providerParam = searchParams.get("provider");
+
+    if (!stateParam) {
+      setErrorMessage("Missing OAuth state parameter in callback URL");
+      setIsProcessing(false);
+      return;
+    }
+
+    hasTriggeredRef.current = true;
 
     async function resolveConnection() {
       try {
@@ -38,6 +57,9 @@ export function OAuthCallbackPage() {
           channel: any;
         }>("/channels/oauth/resolve", {
           stateToken: stateParam || undefined,
+          state: stateParam || undefined,
+          code: codeParam || undefined,
+          provider: providerParam || undefined,
         });
 
         const targetWsId = res.workspaceId || paramWorkspaceId || null;

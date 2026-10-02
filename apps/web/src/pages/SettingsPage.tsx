@@ -89,14 +89,14 @@ export function SettingsPage() {
       setNewWsName("");
       navigate(`/app/${created.id}`);
     } catch (err: any) {
-      alert(err.message || "Failed to create workspace");
+      setStatusMessage({ type: "error", text: err.message || "Could not create workspace." });
     }
   }
 
   const isOwner = workspace?.role === "OWNER";
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 max-w-4xl w-full mx-auto space-y-6 sm:space-y-8">
+    <div className="page-shell space-y-6 sm:space-y-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
         <div>

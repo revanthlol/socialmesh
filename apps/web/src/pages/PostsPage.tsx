@@ -1,436 +1,149 @@
-import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  PenSquare,
-  Clock,
-  Trash2,
-  Edit3,
-  Image as ImageIcon,
-  Share2,
-  Calendar,
-  XCircle,
-  AlertCircle,
-  CheckCircle2,
-  Copy,
-  ExternalLink,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { AlertCircle, CalendarClock, Check, ChevronDown, ChevronUp, Clock3, Copy, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, PenLine, Trash2, Video, X } from "lucide-react";
 import { usePosts } from "../hooks/usePosts.js";
 import { Button } from "../components/ui/Button.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
-import { Badge, type BadgeVariant } from "../components/ui/Badge.js";
 import { EmptyState } from "../components/ui/EmptyState.js";
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-} from "@/components/ui/context-menu.js";
-import type { PostStatus } from "../api/types.js";
+import type { Post, PostStatus } from "../api/types.js";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog.js";
 
-const STATUS_TABS: { label: string; value?: PostStatus }[] = [
-  { label: "All Items" },
+const FILTERS = [
+  { label: "All", value: "ALL" },
   { label: "Drafts", value: "DRAFT" },
   { label: "Scheduled", value: "SCHEDULED" },
   { label: "Processing", value: "PROCESSING" },
   { label: "Published", value: "PUBLISHED" },
   { label: "Failed", value: "FAILED" },
   { label: "Cancelled", value: "CANCELLED" },
-];
+ ] as const satisfies readonly { label: string; value: PostStatus | "ALL" }[];
+type PostFilter = (typeof FILTERS)[number]["value"];
 
-function getStatusBadgeVariant(status: PostStatus): BadgeVariant {
-  switch (status) {
-    case "DRAFT":
-      return "draft";
-    case "SCHEDULED":
-      return "scheduled";
-    case "PROCESSING":
-      return "processing";
-    case "PUBLISHING":
-      return "publishing";
-    case "PUBLISHED":
-      return "published";
-    case "PARTIAL":
-      return "partial";
-    case "FAILED":
-      return "failed";
-    case "CANCELLED":
-      return "cancelled";
-    default:
-      return "neutral";
-  }
+function statusLabel(status: PostStatus) {
+  return ({ DRAFT: "Draft", SCHEDULED: "Scheduled", PROCESSING: "Processing", PUBLISHING: "Processing", PUBLISHED: "Published", FAILED: "Failed", CANCELLED: "Cancelled", PARTIAL: "Partial" })[status];
+}
+
+function statusTime(post: Post) {
+  const when = post.status === "SCHEDULED" ? post.scheduledFor : post.publishedAt;
+  if (when) return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(when));
+  if (post.status === "PROCESSING" || post.status === "PUBLISHING") return "Publishing now";
+  if (post.status === "FAILED" || post.status === "PARTIAL") return "Action needed";
+  if (post.status === "DRAFT") return "Needs completion";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(post.createdAt));
+}
+
+function providerLabel(provider?: string) {
+  if (!provider) return "social platform";
+  const labels: Record<string, string> = { x: "X", twitter: "X", "linkedin-page": "LinkedIn", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", youtube: "YouTube", pinterest: "Pinterest", reddit: "Reddit", devto: "Dev.to" };
+  return labels[provider.toLowerCase()] || provider;
+}
+
+function targetStatusDiffers(post: Post) {
+  return new Set(post.targets.map((target) => target.status)).size > 1;
 }
 
 export function PostsPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
-  const [selectedStatus, setSelectedStatus] = useState<PostStatus | undefined>(
-    undefined,
-  );
-  const [actionMessage, setActionMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [searchParams] = useSearchParams();
+  const initialFilter = searchParams.get("status")?.toUpperCase();
+  const [selectedFilter, setSelectedFilter] = useState<PostFilter>((FILTERS.find((filter) => filter.value === initialFilter)?.value as PostFilter) || "ALL");
+  const [expandedPost, setExpandedPost] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ kind: "delete" | "cancel"; postId: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const { posts, isLoading, deleteDraft, isDeleting, cancelPost, isCancelling } = usePosts(workspaceId);
 
-  const {
-    posts,
-    isLoading,
-    deleteDraft,
-    isDeleting,
-    cancelPost,
-    isCancelling,
-  } = usePosts(workspaceId, selectedStatus);
+  const counts = useMemo(() => {
+    const byStatus = (status: PostStatus) => posts.filter((post) => post.status === status).length;
+    return { ALL: posts.length, DRAFT: byStatus("DRAFT"), SCHEDULED: byStatus("SCHEDULED"), PROCESSING: byStatus("PROCESSING") + byStatus("PUBLISHING"), PUBLISHED: byStatus("PUBLISHED"), FAILED: byStatus("FAILED") + byStatus("PARTIAL"), CANCELLED: byStatus("CANCELLED") };
+  }, [posts]);
 
-  async function handleDelete(postId: string) {
-    if (!confirm("Are you sure you want to delete this publication record?"))
-      return;
-    setActionMessage(null);
+  const visiblePosts = useMemo(() => posts
+    .filter((post) => selectedFilter === "ALL" || (selectedFilter === "PROCESSING" ? post.status === "PROCESSING" || post.status === "PUBLISHING" : selectedFilter === "FAILED" ? post.status === "FAILED" || post.status === "PARTIAL" : post.status === selectedFilter))
+    .sort((a, b) => {
+      const aTime = a.status === "SCHEDULED" && a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.updatedAt).getTime();
+      const bTime = b.status === "SCHEDULED" && b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.updatedAt).getTime();
+      return a.status === "SCHEDULED" && b.status === "SCHEDULED" ? aTime - bTime : bTime - aTime;
+    }), [posts, selectedFilter]);
+
+  async function confirmDelete(postId: string) {
+    setFeedback(null);
     try {
       await deleteDraft(postId);
-      setActionMessage({
-        type: "success",
-        text: "Publication deleted successfully.",
-      });
-    } catch (err: any) {
-      setActionMessage({
-        type: "error",
-        text: err.message || "Failed to delete post",
-      });
+      setConfirmation(null);
+      setFeedback({ type: "success", text: "Post deleted." });
+    } catch (error) {
+      setConfirmation(null);
+      setFeedback({ type: "error", text: error instanceof Error ? error.message : "Could not delete this post." });
     }
   }
 
-  async function handleCancel(postId: string) {
-    if (!confirm("Are you sure you want to cancel this scheduled publication?"))
-      return;
-    setActionMessage(null);
+  async function confirmCancel(postId: string) {
+    setFeedback(null);
     try {
       await cancelPost(postId);
-      setActionMessage({
-        type: "success",
-        text: "Scheduled publication cancelled.",
-      });
-    } catch (err: any) {
-      setActionMessage({
-        type: "error",
-        text: err.message || "Failed to cancel post",
-      });
+      setConfirmation(null);
+      setFeedback({ type: "success", text: "Schedule cancelled." });
+    } catch (error) {
+      setConfirmation(null);
+      setFeedback({ type: "error", text: error instanceof Error ? error.message : "Could not cancel this schedule." });
     }
   }
 
-  return (
-    <div className="p-4 sm:p-6 md:p-8 max-w-6xl w-full mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
-        <div>
-          <h1 className="text-2xl font-serif font-bold text-[#161a1d] dark:text-white">
-            Publications & History
-          </h1>
-          <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-1">
-            Track and manage drafts, scheduled social releases, and publishing
-            logs.
-          </p>
-        </div>
+  async function copyPost(content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setFeedback({ type: "success", text: "Post text copied." });
+    } catch {
+      setFeedback({ type: "error", text: "Could not access the clipboard." });
+    }
+  }
 
-        <Link to={`/app/${workspaceId}/compose`}>
-          <Button size="sm" className="gap-2">
-            <PenSquare className="h-3.5 w-3.5" />
-            New Publication
-          </Button>
-        </Link>
-      </div>
+  return <div className="page-shell posts-workspace">
+    {confirmation && <ConfirmDialog title={confirmation.kind === "delete" ? "Delete this post?" : "Cancel this schedule?"} description={confirmation.kind === "delete" ? "This post will be removed from the workspace." : "This post will no longer publish at its scheduled time."} confirmLabel={confirmation.kind === "delete" ? "Delete post" : "Cancel schedule"} isBusy={confirmation.kind === "delete" ? isDeleting : isCancelling} onCancel={() => setConfirmation(null)} onConfirm={() => confirmation.kind === "delete" ? void confirmDelete(confirmation.postId) : void confirmCancel(confirmation.postId)} />}
+    <header className="posts-heading"><div><h1>Posts</h1><p>Review what’s published, scheduled, and still in progress.</p></div><Link to={`/app/${workspaceId}/compose`}><Button><PenLine size={15} />New post</Button></Link></header>
 
-      {actionMessage && (
-        <div
-          className={`p-3 rounded text-xs flex items-center justify-between border ${
-            actionMessage.type === "success"
-              ? "bg-[#e9f2eb] text-[#24613b] border-[#c5e0cb]"
-              : "bg-[#fbeeed] text-[#b23a24] dark:text-[#e05a3a] border-[#f4c6bf]"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {actionMessage.type === "success" ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-            ) : (
-              <AlertCircle className="h-4 w-4 shrink-0" />
-            )}
-            <span>{actionMessage.text}</span>
-          </div>
-          <button
-            onClick={() => setActionMessage(null)}
-            className="font-bold opacity-60 hover:opacity-100"
-          >
-            ×
-          </button>
-        </div>
-      )}
+    {feedback && <div className={`posts-feedback ${feedback.type}`} role={feedback.type === "error" ? "alert" : "status"} aria-live="polite">{feedback.type === "success" ? <Check size={15} /> : <AlertCircle size={15} />}{feedback.text}<button type="button" aria-label="Dismiss message" onClick={() => setFeedback(null)}><X size={14} /></button></div>}
 
-      {/* Filter Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-[#c9c5bb] dark:border-white/[0.08] pb-2">
-        {STATUS_TABS.map((tab) => {
-          const isActive = selectedStatus === tab.value;
-          return (
-            <button
-              key={tab.label}
-              onClick={() => setSelectedStatus(tab.value)}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors cursor-pointer ${
-                isActive
-                  ? "bg-[#161a1d] text-white"
-                  : "bg-transparent text-[#4c5359] dark:text-zinc-400 hover:bg-[#e8e6df] hover:text-[#161a1d] dark:text-white"
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+    <nav className="post-filters" aria-label="Filter posts">{FILTERS.map((filter) => <button key={filter.value} type="button" aria-pressed={selectedFilter === filter.value} className={selectedFilter === filter.value ? "is-selected" : ""} onClick={() => setSelectedFilter(filter.value)}>{filter.label}<span>{counts[filter.value]}</span></button>)}</nav>
 
-      {/* Posts List */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {[...Array(3)].map((_, i) => (
-            <div
-              key={i}
-              className="p-5 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-3"
-            >
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-5 w-20 rounded" />
-                <Skeleton className="h-4 w-28 rounded" />
-              </div>
-              <Skeleton className="h-4 w-3/4 rounded" />
-              <Skeleton className="h-4 w-1/2 rounded" />
+    {isLoading ? <div className="post-list-skeleton" aria-label="Loading posts">{[0, 1, 2, 3].map((n) => <div key={n} className="post-skeleton"><Skeleton className="h-4 w-3/5" /><Skeleton className="h-4 w-1/3" /></div>)}</div>
+      : visiblePosts.length === 0 ? <div className="posts-empty"><EmptyState icon={<FileText size={28} />} title={selectedFilter === "ALL" ? "No posts yet" : `No ${FILTERS.find((item) => item.value === selectedFilter)?.label.toLowerCase()} posts`} description={selectedFilter === "ALL" ? "Create a draft or schedule a post to start your publishing history." : "Posts with this status will appear here."} action={selectedFilter === "ALL" ? <Link to={`/app/${workspaceId}/compose`}><Button><PenLine size={15} />Compose a post</Button></Link> : undefined} /></div>
+      : <div className="post-feed">{visiblePosts.map((post) => {
+        const failedTargets = post.targets.filter((target) => target.status === "FAILED");
+        const statusClass = post.status.toLowerCase();
+        const schedule = post.status === "SCHEDULED" && post.scheduledFor;
+        const publishedLinks = post.targets.filter((target) => Boolean(target.providerPostUrl));
+        const needsAttention = post.status === "FAILED" || post.status === "PARTIAL";
+        const canDelete = post.status === "DRAFT" || post.status === "FAILED" || post.status === "PARTIAL" || post.status === "CANCELLED";
+        return <article key={post.id} className={`post-row ${statusClass} ${needsAttention ? "needs-attention" : ""}`}>
+          <div className="post-row-main">
+            <div className="post-preview-column">
+              <p className="post-content-preview">{post.content || <span className="post-empty-copy">No text added</span>}</p>
+              {post.media.length > 0 && <div className="post-media-strip" aria-label={`${post.media.length} attached ${post.media.length === 1 ? "media item" : "media items"}`}>{post.media.slice(0, 4).map((item, index) => <span className="post-media-thumb" key={`${post.id}-media-${index}`}>{item.asset?.kind === "IMAGE" && item.asset.viewUrl ? <img src={item.asset.viewUrl} alt={item.asset.originalName} loading="lazy" /> : item.asset?.kind === "VIDEO" && item.asset.viewUrl ? <video src={item.asset.viewUrl} preload="metadata" aria-label={item.asset.originalName} /> : <Video size={18} />}</span>)}{post.media.length > 4 && <span className="post-media-more">+{post.media.length - 4}</span>}</div>}
             </div>
-          ))}
-        </div>
-      ) : posts.length === 0 ? (
-        <EmptyState
-          icon={<PenSquare className="h-8 w-8" />}
-          title={
-            selectedStatus
-              ? `No ${selectedStatus.toLowerCase()} posts`
-              : "No posts found"
-          }
-          description="Create your first publication to begin managing your social publishing pipeline."
-          action={
-            <Link to={`/app/${workspaceId}/compose`}>
-              <Button size="sm">Create New Post</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <div className="divide-y divide-[#c9c5bb] border border-[#c9c5bb] dark:border-white/[0.08] rounded bg-[#faf9f5] dark:bg-[#1c1c1f]">
-          {posts.map((post) => (
-            <ContextMenu key={post.id}>
-              <ContextMenuTrigger asChild>
-                <div
-                  className="p-4 md:p-6 flex flex-col md:flex-row md:items-start justify-between gap-4 hover:bg-[#f4f2ec] dark:bg-white/[0.04] transition-colors cursor-context-menu"
-                >
-                  <div className="min-w-0 flex-1 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={getStatusBadgeVariant(post.status)}>
-                        {post.status}
-                      </Badge>
-
-                      {/* Scheduled or Published Timestamp */}
-                      {post.scheduledFor && post.status === "SCHEDULED" && (
-                        <span className="text-xs text-[#1e4d7b] flex items-center gap-1 font-mono font-medium">
-                          <Calendar className="h-3 w-3" />
-                          Scheduled for{" "}
-                          {new Date(post.scheduledFor).toLocaleString([], {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      )}
-
-                      {post.publishedAt && (
-                        <span className="text-xs text-[#24613b] flex items-center gap-1 font-mono">
-                          <Clock className="h-3 w-3" />
-                          Published{" "}
-                          {new Date(post.publishedAt).toLocaleDateString()} at{" "}
-                          {new Date(post.publishedAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      )}
-
-                      <span className="text-xs text-[#6b706f] dark:text-zinc-500 flex items-center gap-1 font-mono">
-                        Created {new Date(post.createdAt).toLocaleDateString()}
-                      </span>
-
-                      {post.createdBy && (
-                        <span className="text-xs text-[#6b706f] dark:text-zinc-500">
-                          by{" "}
-                          <span className="text-[#161a1d] dark:text-white font-medium">
-                            {post.createdBy.displayName}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Target Channels */}
-                    {post.targets && post.targets.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <span className="text-[11px] uppercase tracking-wider text-[#6b706f] dark:text-zinc-500 font-mono flex items-center gap-1">
-                          <Share2 className="h-3 w-3" /> Destinations:
-                        </span>
-                        {post.targets.map((t) => (
-                          <span
-                            key={t.id}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-white text-[11px] font-medium text-[#161a1d] dark:text-white"
-                          >
-                            {t.channel?.name || "Channel"}
-                            <span className="text-[10px] text-[#6b706f] dark:text-zinc-500 uppercase font-mono">
-                              ({t.channel?.provider || "provider"})
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Post Content */}
-                    <p className="text-sm text-[#161a1d] dark:text-white whitespace-pre-wrap font-sans leading-relaxed">
-                      {post.content}
-                    </p>
-
-                    {/* Error Banner if Failed */}
-                    {post.status === "FAILED" && post.lastError && (
-                      <div className="p-2.5 rounded bg-[#fbeeed] border border-[#f4c6bf] text-xs text-[#b23a24] dark:text-[#e05a3a] flex items-start gap-2">
-                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-semibold">
-                            Publishing Error: {post.lastErrorCode || "ERROR"}
-                          </p>
-                          <p className="opacity-90">{post.lastError}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Attached Media Previews */}
-                    {post.media.length > 0 && (
-                      <div className="flex items-center gap-2 pt-1">
-                        {post.media.map((pm, idx) => (
-                          <div
-                            key={idx}
-                            className="h-14 w-14 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#e8e6df] overflow-hidden shrink-0 flex items-center justify-center"
-                          >
-                            {pm.asset?.viewUrl && pm.asset.kind === "IMAGE" ? (
-                              <img
-                                src={pm.asset.viewUrl}
-                                alt={pm.asset.originalName}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <ImageIcon className="h-5 w-5 text-[#6b706f] dark:text-zinc-500" />
-                            )}
-                          </div>
-                        ))}
-                        <span className="text-xs text-[#6b706f] dark:text-zinc-500 font-mono pl-1">
-                          {post.media.length} media attached
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action Controls */}
-                  <div className="flex items-center gap-2 shrink-0 self-end md:self-start">
-                    {post.status === "DRAFT" && (
-                      <Link to={`/app/${workspaceId}/compose?postId=${post.id}`}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1 text-xs"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                          Edit
-                        </Button>
-                      </Link>
-                    )}
-
-                    {post.status === "SCHEDULED" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCancel(post.id)}
-                        disabled={isCancelling}
-                        className="gap-1 text-xs text-[#b23a24] dark:text-[#e05a3a] hover:bg-[#fbeeed]"
-                      >
-                        <XCircle className="h-3.5 w-3.5" />
-                        Cancel Schedule
-                      </Button>
-                    )}
-
-                    {(post.status === "DRAFT" ||
-                      post.status === "FAILED" ||
-                      post.status === "CANCELLED") && (
-                      <button
-                        onClick={() => handleDelete(post.id)}
-                        disabled={isDeleting}
-                        title="Delete post record"
-                        className="p-2 text-[#6b706f] dark:text-zinc-500 hover:text-[#b23a24] dark:text-[#e05a3a] hover:bg-[#e8e6df] rounded transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem
-                  onClick={() =>
-                    navigate(`/app/${workspaceId}/compose?postId=${post.id}`)
-                  }
-                >
-                  <Edit3 className="h-3.5 w-3.5" />
-                  <span>{post.status === "DRAFT" ? "Edit Draft" : "Open in Composer"}</span>
-                </ContextMenuItem>
-                <ContextMenuItem
-                  onClick={() => {
-                    navigator.clipboard.writeText(post.content);
-                    setActionMessage({
-                      type: "success",
-                      text: "Post content copied to clipboard.",
-                    });
-                  }}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                  <span>Copy Text Content</span>
-                </ContextMenuItem>
-                {post.status === "SCHEDULED" && (
-                  <>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      variant="destructive"
-                      onClick={() => handleCancel(post.id)}
-                      disabled={isCancelling}
-                    >
-                      <XCircle className="h-3.5 w-3.5" />
-                      <span>Cancel Schedule</span>
-                    </ContextMenuItem>
-                  </>
-                )}
-                {(post.status === "DRAFT" ||
-                  post.status === "FAILED" ||
-                  post.status === "CANCELLED") && (
-                  <>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      variant="destructive"
-                      onClick={() => handleDelete(post.id)}
-                      disabled={isDeleting}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Delete Publication</span>
-                    </ContextMenuItem>
-                  </>
-                )}
-              </ContextMenuContent>
-            </ContextMenu>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+            <div className="post-row-info">
+              <span className={`post-status ${statusClass}`}><span className="post-status-dot" />{statusLabel(post.status)}</span>
+              <span className={`post-time ${schedule ? "scheduled-time" : ""}`}>{schedule ? <CalendarClock size={14} /> : post.status === "PROCESSING" || post.status === "PUBLISHING" ? <LoaderCircle className="post-processing-icon" size={14} /> : post.status === "PUBLISHED" ? <Clock3 size={14} /> : needsAttention ? <AlertCircle size={14} /> : null}{schedule ? `Publishes ${statusTime(post)}` : statusTime(post)}</span>
+              <span className="post-destinations" title={post.targets.map((target) => target.channel?.name || providerLabel(target.channel?.provider)).join(", ")}>{post.targets.length ? <>{post.targets.slice(0, 2).map((target) => <span className="post-destination" key={target.id}>{target.channel?.pictureUrl ? <img src={target.channel.pictureUrl} alt="" /> : <span className="post-destination-initial">{(target.channel?.name || providerLabel(target.channel?.provider)).slice(0, 1).toUpperCase()}</span>}<span>{target.channel?.name || providerLabel(target.channel?.provider)}</span></span>)}{post.targets.length > 2 && <span className="destination-overflow">+{post.targets.length - 2}</span>}</> : <span className="no-destinations">No destinations</span>}</span>
+              {needsAttention && (post.lastError || failedTargets[0]?.lastError) && <p className="post-failure-summary"><AlertCircle size={14} />{post.lastError || failedTargets[0]?.lastError}</p>}
+            </div>
+            <div className="post-row-actions">
+              {post.status === "DRAFT" && <Link className="post-action-link" to={`/app/${workspaceId}/compose?postId=${post.id}`}><PenLine size={14} />Edit</Link>}
+              {post.status === "SCHEDULED" && <button type="button" className="post-action-link" onClick={() => setConfirmation({ kind: "cancel", postId: post.id })}>Cancel</button>}
+              {post.status === "PUBLISHED" && publishedLinks[0] && <a className="post-action-link provider-link" href={publishedLinks[0].providerPostUrl!} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} />View on {providerLabel(publishedLinks[0].channel?.provider)}</a>}
+              <button type="button" className="post-details-toggle" aria-expanded={expandedPost === post.id} onClick={() => setExpandedPost((current) => current === post.id ? null : post.id)}>{expandedPost === post.id ? "Hide details" : "Details"}{expandedPost === post.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
+              {canDelete && <button type="button" className="post-delete" aria-label="Delete post" onClick={() => setConfirmation({ kind: "delete", postId: post.id })}><Trash2 size={15} /></button>}
+            </div>
+          </div>
+          {expandedPost === post.id && <div className="post-details">
+            <div className="post-detail-head"><span>Destinations</span>{post.createdBy && <span>Created by {post.createdBy.displayName}</span>}</div>
+            {post.targets.length ? <div className="post-target-list">{post.targets.map((target) => <div className="post-target-row" key={target.id}><span className="post-target-name">{target.channel?.name || providerLabel(target.channel?.provider)}</span><span className={`post-target-status ${target.status.toLowerCase()}`}>{statusLabel(target.status)}</span>{target.lastError && <span className="post-target-error">{target.lastError}</span>}{target.providerPostUrl && <a href={target.providerPostUrl} target="_blank" rel="noopener noreferrer">View on {providerLabel(target.channel?.provider)} <ExternalLink size={13} /></a>}</div>)}</div> : <p className="post-details-empty">No destinations selected.</p>}
+            {post.lastError && !failedTargets.some((target) => target.lastError === post.lastError) && <p className="post-details-error"><AlertCircle size={15} />{post.lastError}</p>}
+            {post.targets.length > 1 && targetStatusDiffers(post) && <p className="post-details-note">This post has different results across destinations.</p>}
+            <div className="post-details-footer"><span>Created {new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(post.createdAt))}</span><button type="button" onClick={() => void copyPost(post.content)}><Copy size={13} />Copy text</button>{post.status === "DRAFT" && <button type="button" onClick={() => navigate(`/app/${workspaceId}/compose?postId=${post.id}`)}><PenLine size={13} />Edit draft</button>}</div>
+          </div>}
+        </article>;
+      })}</div>}
+  </div>;
 }

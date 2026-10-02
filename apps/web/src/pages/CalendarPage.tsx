@@ -74,7 +74,7 @@ export function CalendarPage() {
 
   if (isLoading) {
     return (
-      <div className="p-4 sm:p-6 md:p-8 max-w-6xl w-full mx-auto space-y-6">
+      <div className="page-shell space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
           <div className="space-y-2">
             <Skeleton className="h-8 w-48" />
@@ -89,7 +89,7 @@ export function CalendarPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 max-w-6xl w-full mx-auto space-y-6">
+    <div className="page-shell space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
         <div>
@@ -146,7 +146,7 @@ export function CalendarPage() {
       </div>
 
       {/* Calendar Grid */}
-      <div className="border border-[#c9c5bb] dark:border-white/[0.08] rounded bg-white overflow-hidden shadow-sm">
+      <div className="calendar-grid-container border border-[#c9c5bb] dark:border-white/[0.08] rounded bg-white overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <div className="min-w-[620px]">
             {/* Day Header */}
@@ -197,11 +197,12 @@ export function CalendarPage() {
 
                     <div className="space-y-1 overflow-y-auto max-h-20">
                       {dayPosts.map((p) => (
-                        <div
+                        <button
                           key={p.id}
                           onClick={() => setSelectedPost(p)}
-                          className="p-1 rounded text-[11px] border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] hover:border-[#161a1d] cursor-pointer truncate"
+                          className="calendar-event p-1 rounded text-[11px] border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] hover:border-[#161a1d] cursor-pointer truncate"
                           title={p.content}
+                          aria-label={`Scheduled at ${new Date(p.scheduledFor!).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${p.content}`}
                         >
                           <div className="flex items-center gap-1 font-mono text-[9px] text-[#1e4d7b]">
                             <Clock className="h-2.5 w-2.5" />
@@ -213,7 +214,7 @@ export function CalendarPage() {
                           <p className="truncate text-[#161a1d] dark:text-white font-sans">
                             {p.content}
                           </p>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -223,6 +224,19 @@ export function CalendarPage() {
           </div>
         </div>
       </div>
+
+      <section className="mobile-calendar-agenda" aria-label="Scheduled posts this month">
+        {Array.from({ length: daysInMonth }, (_, index) => {
+          const dayNum = index + 1;
+          const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+          const dayPosts = postsByDate.get(dateKey) || [];
+          if (!dayPosts.length) return null;
+          return <div className="agenda-day" key={dateKey}><h3>{new Date(year, month, dayNum).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</h3>
+            {dayPosts.map((post) => <button className="agenda-event" key={post.id} onClick={() => setSelectedPost(post)}><span>{new Date(post.scheduledFor!).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span><span>{post.content || "Untitled post"}</span><Badge variant="scheduled">Scheduled</Badge></button>)}
+          </div>;
+        })}
+        {scheduledPosts.length === 0 && <EmptyState icon={<CalendarIcon className="h-7 w-7" />} title="Nothing scheduled this month" description="Schedule a post and it will show up here." />}
+      </section>
 
       {/* Selected Post Modal / Drawer */}
       {selectedPost && (

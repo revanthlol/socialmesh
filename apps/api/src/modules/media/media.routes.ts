@@ -35,4 +35,9 @@ router.delete(
   mediaController.delete,
 );
 
-export { router as mediaRouter };
+const publicRouter = Router();
+publicRouter.get("/durable/:token/:filename", mediaController.serveDurableMedia);
+publicRouter.get("/durable/:token", mediaController.serveDurableMedia);
+
+export { router as mediaRouter, publicRouter as publicMediaRouter };
+

@@ -86,6 +86,8 @@ export interface PostTargetItem {
   status: PostStatus;
   scheduledFor?: string | null;
   publishedAt?: string | null;
+  providerPostUrl?: string | null;
+  providerPostId?: string | null;
   lastError?: string | null;
   lastErrorCode?: string | null;
   channel?: {

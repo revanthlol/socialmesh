@@ -256,6 +256,7 @@ model PendingChannelConnection {
   userId      String   @map("user_id") @db.Uuid
   provider    String
   stateToken  String   @unique @map("state_token")
+  postizState String?  @unique @map("postiz_state")
   expiresAt   DateTime @map("expires_at")
   createdAt   DateTime @default(now()) @map("created_at")
 
@@ -263,6 +264,7 @@ model PendingChannelConnection {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([stateToken])
+  @@index([postizState])
   @@index([expiresAt])
   @@index([workspaceId, userId])
   @@map("pending_channel_connections")

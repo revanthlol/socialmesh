@@ -109,6 +109,37 @@ describe("PostizClient (Adapter Boundary)", () => {
       expect(result).toEqual(mockIntegrations);
     });
 
+    it("successfully parses integrations with string profile and customer object", async () => {
+      const realPostizPayload = [
+        {
+          id: "int_fb_1",
+          name: "Acme Facebook Page",
+          identifier: "facebook",
+          picture: "https://graph.facebook.com/pic.jpg",
+          disabled: false,
+          profile: "10928374652",
+          customer: {
+            id: "cust_123",
+            name: "Client Account",
+          },
+        },
+      ];
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => realPostizPayload,
+        }),
+      );
+
+      const result = await client.listIntegrations();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.profile).toBe("10928374652");
+      expect(result[0]!.customer?.id).toBe("cust_123");
+    });
+
     it("includes x-postiz-org header when organizationId is supplied", async () => {
       const customClient = new PostizClient({
         baseUrl: fakeBaseUrl,
@@ -334,6 +365,123 @@ describe("PostizClient (Adapter Boundary)", () => {
           settings: {},
         },
       ]);
+    });
+
+    it("attaches media objects into posts[].value[].image with id and path", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 201,
+          json: async () => ({ id: "post_media_1", state: "PROCESSING" }),
+        }),
+      );
+
+      await client.publishNow({
+        content: "Check this photo",
+        integrations: ["int_fb_1"],
+        media: [
+          {
+            id: "asset-123",
+            path: "https://r2.example.com/asset-123.png?signed=true",
+          },
+        ],
+      });
+
+      const call = (fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.posts[0].value[0].image).toEqual([
+        {
+          id: "asset-123",
+          path: "https://r2.example.com/asset-123.png?signed=true",
+        },
+      ]);
+    });
+
+    it("retains multiple media attachments and normalizes string URLs", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 201,
+          json: async () => ({ id: "post_media_multi", state: "PROCESSING" }),
+        }),
+      );
+
+      await client.publishNow({
+        content: "Multi photo post",
+        integrations: ["int_fb_1"],
+        media: [
+          { id: "asset-1", path: "https://r2.example.com/pic1.jpg" },
+          "https://r2.example.com/pic2.png",
+        ],
+      });
+
+      const call = (fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.posts[0].value[0].image).toEqual([
+        { id: "asset-1", path: "https://r2.example.com/pic1.jpg" },
+        { id: "media-1", path: "https://r2.example.com/pic2.png" },
+      ]);
+    });
+
+    it("injects settings.post_type = 'post' specifically for Instagram targets while leaving Facebook untouched", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 201,
+          json: async () => ({ id: "post_cross_provider", state: "PROCESSING" }),
+        }),
+      );
+
+      await client.publishNow({
+        content: "Cross-platform post",
+        integrations: [
+          { id: "ig_channel_1", provider: "instagram" },
+          { id: "fb_channel_1", provider: "facebook" },
+        ],
+        media: [
+          {
+            id: "asset-ig",
+            path: "https://r2.example.com/asset-ig.png",
+          },
+        ],
+      });
+
+      const call = (fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+
+      // Instagram target must have post_type: "post"
+      expect(body.posts[0].integration.id).toBe("ig_channel_1");
+      expect(body.posts[0].settings).toEqual({ post_type: "post" });
+
+      // Facebook target must not have post_type injected
+      expect(body.posts[1].integration.id).toBe("fb_channel_1");
+      expect(body.posts[1].settings).toEqual({});
+    });
+
+    it("preserves explicitly specified settings.post_type for Instagram", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 201,
+          json: async () => ({ id: "post_ig_story", state: "PROCESSING" }),
+        }),
+      );
+
+      await client.publishNow({
+        content: "Story post",
+        integrations: [
+          { id: "ig_channel_1", provider: "instagram", settings: { post_type: "story" } },
+        ],
+      });
+
+      const call = (fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.posts[0].settings).toEqual({ post_type: "story" });
     });
   });
 

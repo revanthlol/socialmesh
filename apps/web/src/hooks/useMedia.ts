@@ -3,6 +3,19 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, uploadToPresignedUrl } from "../api/client.js";
 import type { MediaAsset, MediaKind } from "../api/types.js";
 
+export const SUPPORTED_MEDIA_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "video/mp4",
+  "video/quicktime",
+] as const;
+
+export function isSupportedMediaFile(file: File) {
+  return SUPPORTED_MEDIA_TYPES.includes(file.type as (typeof SUPPORTED_MEDIA_TYPES)[number]);
+}
+
 export function useMediaList(workspaceId?: string, kind?: MediaKind) {
   return useQuery({
     queryKey: ["workspaces", workspaceId, "media", { kind }],

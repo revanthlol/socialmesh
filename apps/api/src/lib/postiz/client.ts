@@ -19,6 +19,7 @@ import {
   type PostizCreatePostResponse,
   PostizCreatePostResponseSchema,
   type PostizIntegration,
+  PostizIntegrationSchema,
   PostizIsConnectedResponseSchema,
   type PostizListIntegrationsResponse,
   PostizListIntegrationsResponseSchema,
@@ -47,11 +48,15 @@ export const POSTIZ_DIRECT_ENDPOINTS = {
   integrations: "/public/v1/integrations",
   social: (provider: string) =>
     `/public/v1/social/${encodeURIComponent(provider)}`,
+  completeSocial: (provider: string) =>
+    `/public/v1/social/${encodeURIComponent(provider)}/complete`,
   integrationById: (id: string) =>
     `/public/v1/integrations/${encodeURIComponent(id)}`,
   posts: "/public/v1/posts",
   postById: (id: string) => `/public/v1/posts/${encodeURIComponent(id)}`,
   uploadFromUrl: "/public/v1/upload-from-url",
+  analytics: (integrationId: string, days = 30) =>
+    `/public/v1/analytics/${encodeURIComponent(integrationId)}?date=${encodeURIComponent(days)}`,
 } as const;
 
 /**
@@ -98,16 +103,61 @@ export class PostizClient {
       };
     }
 
+    const formattedImages: Array<{ id: string; path: string; alt?: string }> = (
+      input.media || []
+    )
+      .map((item, idx) => {
+        if (typeof item === "string") {
+          return {
+            id: `media-${idx}`,
+            path: item,
+          };
+        }
+        const path = item.path || (item as any).url || "";
+        return {
+          id: item.id || `media-${idx}`,
+          path,
+          ...((item as any).alt ? { alt: (item as any).alt } : {}),
+        };
+      })
+      .filter((img) => Boolean(img.path));
+
     const mappedPosts = (input.integrations || []).map((item) => {
       const integrationId = typeof item === "string" ? item : item.id;
       const customContent =
         typeof item === "object" && item.customContent
           ? item.customContent
           : (input.content ?? "");
+      const provider =
+        typeof item === "object" && item.provider
+          ? item.provider.toLowerCase()
+          : undefined;
+
+      const itemSettings =
+        typeof item === "object" && item.settings
+          ? { ...item.settings }
+          : {};
+
+      const baseSettings = input.settings ? { ...input.settings } : {};
+
+      const combinedSettings: Record<string, unknown> = {
+        ...baseSettings,
+        ...itemSettings,
+      };
+
+      // Provider-specific default settings required by Postiz DTOs:
+      // For Instagram, Postiz's InstagramDto strictly requires post_type: 'post' | 'story'
+      // Normal feed publications must specify post_type: 'post'
+      if (provider && provider.includes("instagram")) {
+        if (!combinedSettings.post_type) {
+          combinedSettings.post_type = "post";
+        }
+      }
+
       return {
         integration: { id: integrationId },
-        value: [{ content: customContent, image: [] }],
-        settings: input.settings ?? {},
+        value: [{ content: customContent, image: formattedImages }],
+        settings: combinedSettings,
       };
     });
 
@@ -119,7 +169,7 @@ export class PostizClient {
       content: input.content,
       integrations: input.integrations,
       posts: mappedPosts,
-      media: input.media,
+      ...(formattedImages.length > 0 ? { media: formattedImages } : {}),
       settings: input.settings,
     };
   }
@@ -235,15 +285,30 @@ export class PostizClient {
           }
         }
 
+        const errObj =
+          typeof errorBody === "object" && errorBody !== null
+            ? (errorBody as Record<string, unknown>)
+            : null;
+        const rawMsg = errObj?.message ?? errObj?.msg ?? errObj?.error;
         const message =
-          (typeof errorBody === "object" &&
-          errorBody !== null &&
-          "message" in errorBody
-            ? Array.isArray((errorBody as { message: unknown }).message)
-              ? (errorBody as { message: unknown[] }).message.join(", ")
-              : String((errorBody as { message: unknown }).message)
+          (rawMsg !== undefined && rawMsg !== null
+            ? Array.isArray(rawMsg)
+              ? rawMsg.join(", ")
+              : typeof rawMsg === "object" && "message" in (rawMsg as any)
+                ? String((rawMsg as any).message)
+                : String(rawMsg)
             : undefined) ??
           `Postiz API responded with status ${response.status}`;
+
+        this.logger.warn(
+          {
+            statusCode: response.status,
+            path: cleanPath,
+            errorBody,
+            extractedMessage: message,
+          },
+          "Postiz API returned non-OK response",
+        );
 
         if (response.status === 401 || response.status === 403) {
           throw new PostizAuthenticationError(
@@ -381,15 +446,45 @@ export class PostizClient {
    */
   async getConnectUrl(
     provider: string,
+    redirectUrl?: string,
     options?: PostizRequestOptions,
   ): Promise<string> {
+    const query = redirectUrl
+      ? `?redirectUrl=${encodeURIComponent(redirectUrl)}`
+      : "";
     const data = await this.request(
-      POSTIZ_DIRECT_ENDPOINTS.social(provider),
+      `${POSTIZ_DIRECT_ENDPOINTS.social(provider)}${query}`,
       { method: "GET" },
       options,
       PostizConnectUrlResponseSchema,
     );
     return data.url;
+  }
+
+  /**
+   * Complete an OAuth connection flow with a provider authorization code.
+   * Exchanges code for tokens in Postiz and returns the connected integration.
+   */
+  async completeSocialConnection(
+    provider: string,
+    payload: {
+      code: string;
+      state: string;
+      timezone?: string | undefined;
+      pageId?: string | undefined;
+      refresh?: string | undefined;
+    },
+    options?: PostizRequestOptions,
+  ): Promise<PostizIntegration> {
+    return this.request(
+      POSTIZ_DIRECT_ENDPOINTS.completeSocial(provider),
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      options,
+      PostizIntegrationSchema,
+    );
   }
 
   /**
@@ -521,6 +616,23 @@ export class PostizClient {
       },
       options,
       PostizUploadFromUrlResponseSchema,
+    );
+  }
+
+  /**
+   * Fetch timeseries analytics for a connected integration.
+   */
+  async getAnalytics(
+    integrationId: string,
+    days = 30,
+    options?: PostizRequestOptions,
+  ): Promise<any> {
+    return this.request(
+      POSTIZ_DIRECT_ENDPOINTS.analytics(integrationId, days),
+      {
+        method: "GET",
+      },
+      options,
     );
   }
 }

@@ -14,6 +14,14 @@ export function usePosts(workspaceId?: string, status?: PostStatus) {
       });
     },
     enabled: !!workspaceId,
+    refetchInterval: (query) => {
+      const posts = query.state.data;
+      if (!posts || !Array.isArray(posts)) return false;
+      const hasPending = posts.some(
+        (p) => p.status === "PROCESSING" || p.status === "PUBLISHING",
+      );
+      return hasPending ? 3000 : false;
+    },
   });
 
   const createDraftMutation = useMutation({
@@ -129,6 +137,21 @@ export function usePosts(workspaceId?: string, status?: PostStatus) {
     },
   });
 
+  const reconcileMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      if (!workspaceId) throw new Error("Workspace ID is required");
+      return await api.post<Post>(
+        `/workspaces/${workspaceId}/posts/${postId}/reconcile`,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["workspaces", workspaceId, "posts"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["workspaces", workspaceId] });
+    },
+  });
+
   return {
     posts: query.data || [],
     isLoading: query.isLoading,
@@ -146,6 +169,8 @@ export function usePosts(workspaceId?: string, status?: PostStatus) {
     isScheduling: scheduleMutation.isPending,
     cancelPost: cancelMutation.mutateAsync,
     isCancelling: cancelMutation.isPending,
+    reconcilePost: reconcileMutation.mutateAsync,
+    isReconciling: reconcileMutation.isPending,
   };
 }
 
@@ -157,5 +182,12 @@ export function usePost(workspaceId?: string, postId?: string) {
       return await api.get<Post>(`/workspaces/${workspaceId}/posts/${postId}`);
     },
     enabled: !!workspaceId && !!postId,
+    refetchInterval: (query) => {
+      const post = query.state.data;
+      if (!post) return false;
+      return post.status === "PROCESSING" || post.status === "PUBLISHING"
+        ? 3000
+        : false;
+    },
   });
 }

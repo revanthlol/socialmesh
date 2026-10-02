@@ -1,6 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
 import { mediaService } from "./media.service.js";
 import { getParam } from "../../lib/params.js";
+import { AppError } from "../../lib/errors.js";
+import { prisma } from "../../lib/prisma.js";
+import {
+  verifyDurableMediaToken,
+  createPresignedViewUrl,
+  getMediaObjectStream,
+} from "../../lib/r2.js";
 
 export class MediaController {
   async requestUploadUrl(req: Request, res: Response, next: NextFunction) {
@@ -57,6 +64,63 @@ export class MediaController {
       next(error);
     }
   }
+
+  /**
+   * Public signature-verified durable media resolution endpoint.
+   * Resolves long-future scheduled media into fresh short-lived presigned URLs or streams bytes.
+   */
+  async serveDurableMedia(req: Request, res: Response, next: NextFunction) {
+    try {
+      const rawToken = req.params.token;
+      const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
+      if (!token || typeof token !== "string") {
+        throw AppError.badRequest("Missing media token");
+      }
+
+      const payload = verifyDurableMediaToken(token);
+      if (!payload) {
+        throw AppError.forbidden("Invalid or expired media token");
+      }
+
+      const asset = await prisma.mediaAsset.findFirst({
+        where: {
+          id: payload.mediaAssetId,
+          workspaceId: payload.workspaceId,
+          status: "READY",
+          deletedAt: null,
+        },
+      });
+
+      if (!asset) {
+        throw AppError.notFound("Media asset not found or no longer available");
+      }
+
+      if (req.query.stream === "1" || req.query.stream === "true") {
+        const streamData = await getMediaObjectStream(asset.objectKey);
+        res.setHeader("Content-Type", asset.mimeType);
+        if (streamData.contentLength) {
+          res.setHeader("Content-Length", streamData.contentLength);
+        }
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        if (
+          streamData.body &&
+          typeof (streamData.body as any).pipe === "function"
+        ) {
+          (streamData.body as any).pipe(res);
+          return;
+        }
+      }
+
+      const freshPresignedUrl = await createPresignedViewUrl(
+        asset.objectKey,
+        3600,
+      );
+      res.redirect(302, freshPresignedUrl);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const mediaController = new MediaController();
+

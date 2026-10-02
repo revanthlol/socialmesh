@@ -52,9 +52,16 @@ describe(
       ]),
       getChannelConnectUrl: vi
         .fn()
-        .mockResolvedValue(
-          "https://auth.example.com/oauth/authorize?state=xyz",
-        ),
+        .mockImplementation(async () => {
+          return `https://auth.example.com/oauth/authorize?state=mock_state_${crypto.randomUUID()}`;
+        }),
+      completeOAuth: vi.fn().mockImplementation(async (provider: string) => ({
+        id: "postiz_int_oauth_result",
+        provider,
+        name: `${provider} Connected Channel`,
+        pictureUrl: "https://example.com/avatar.png",
+        isActive: true,
+      })),
       disconnectChannel: vi.fn().mockResolvedValue(true),
       createDraft: vi.fn().mockResolvedValue({
         enginePostId: "mock_draft_postiz_1",
@@ -89,13 +96,40 @@ describe(
         });
       }),
       cancelPost: vi.fn().mockResolvedValue(true),
+      getPostStatus: vi.fn().mockImplementation(async (enginePostId: string) => ({
+        enginePostId,
+        state: "QUEUE",
+      })),
       importMedia: vi.fn().mockResolvedValue({
         id: "mock_media_1",
         url: "https://cdn.example.com/imported.png",
       }),
+      getChannelAnalytics: vi.fn().mockResolvedValue({
+        available: true,
+        days: 30,
+        metrics: [],
+      }),
     };
 
     beforeAll(async () => {
+      await prisma.workspaceChannel.deleteMany({
+        where: {
+          postizIntegrationId: {
+            in: [
+              "postiz_int_alpha",
+              "postiz_int_beta",
+              "postiz_int_oauth_result",
+              "postiz_int_fb_multi",
+              "postiz_int_1",
+            ],
+          },
+        },
+      }).catch(() => {});
+      await prisma.user.deleteMany({
+        where: { email: { in: [userAEmail, userBEmail] } },
+      }).catch(() => {});
+      await prisma.pendingChannelConnection.deleteMany().catch(() => {});
+
       // Inject mock publishing engine into services
       (postsService as any).publishingEngine = mockPublishingEngine;
       (channelsService as any).publishingEngine = mockPublishingEngine;
@@ -142,6 +176,19 @@ describe(
 
     afterAll(async () => {
       try {
+        await prisma.workspaceChannel.deleteMany({
+          where: {
+            postizIntegrationId: {
+              in: [
+                "postiz_int_alpha",
+                "postiz_int_beta",
+                "postiz_int_oauth_result",
+                "postiz_int_fb_multi",
+                "postiz_int_1",
+              ],
+            },
+          },
+        });
         await prisma.user.deleteMany({
           where: { email: { in: [userAEmail, userBEmail] } },
         });
@@ -340,6 +387,167 @@ describe(
       expect(body.error.message).toMatch(/expired/i);
     });
 
+    it("6d. OAuth Context: User A completes direct OAuth callback with authorization code and Postiz state", async () => {
+      // 1. Initiate OAuth connection for facebook
+      const connectRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/channels/connect-url`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookieA,
+          },
+          body: JSON.stringify({ provider: "facebook" }),
+        },
+      );
+      expect(connectRes.status).toBe(200);
+      const connectBody = await connectRes.json();
+      expect(connectBody.data.url).toContain("https://auth.example.com");
+
+      // Verify postizState was recorded from url
+      const pendingRecord = await prisma.pendingChannelConnection.findFirst({
+        where: { workspaceId: workspaceAId, provider: "facebook" },
+      });
+      expect(pendingRecord).toBeTruthy();
+      expect(pendingRecord?.postizState).toBeTruthy();
+      const stateToResolveD = pendingRecord!.postizState!;
+
+      // 2. Resolve using Postiz state and provider authorization code
+      const resolveRes = await fetch(
+        `${baseUrl}/api/v1/channels/oauth/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookieA,
+          },
+          body: JSON.stringify({
+            state: stateToResolveD,
+            code: "mock_auth_code_987",
+            provider: "facebook",
+          }),
+        },
+      );
+
+      expect(resolveRes.status).toBe(200);
+      const resolveBody = await resolveRes.json();
+      expect(resolveBody.data.success).toBe(true);
+      expect(resolveBody.data.workspaceId).toBe(workspaceAId);
+      expect(resolveBody.data.provider).toBe("facebook");
+      expect(resolveBody.data.channel.postizIntegrationId).toBe(
+        "postiz_int_oauth_result",
+      );
+
+      // Verify completeOAuth was called on engine
+      expect(mockPublishingEngine.completeOAuth).toHaveBeenCalledWith(
+        "facebook",
+        {
+          code: "mock_auth_code_987",
+          state: stateToResolveD,
+        },
+      );
+
+      // Verify single-use consumption: record deleted
+      const pendingAfter = await prisma.pendingChannelConnection.findFirst({
+        where: { id: pendingRecord!.id },
+      });
+      expect(pendingAfter).toBeNull();
+    });
+
+    it("6e. OAuth Context: Concurrent duplicate resolution requests resolve safely without duplicate engine completion or failure", async () => {
+      // 1. Initiate OAuth connection
+      const connectRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/channels/connect-url`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookieA,
+          },
+          body: JSON.stringify({ provider: "x" }),
+        },
+      );
+      const connectBody = await connectRes.json();
+      const stateTokenFromRes = connectBody.data.stateToken;
+      const pendingRecord = await prisma.pendingChannelConnection.findUnique({
+        where: { stateToken: stateTokenFromRes },
+      });
+      expect(pendingRecord).toBeTruthy();
+      expect(pendingRecord?.postizState).toBeTruthy();
+      const stateToResolveE = pendingRecord!.postizState!;
+
+      // Track engine completion calls
+      let completeOAuthCalls = 0;
+      const originalComplete = mockPublishingEngine.completeOAuth;
+      mockPublishingEngine.completeOAuth = vi
+        .fn()
+        .mockImplementation(async (provider: string) => {
+          completeOAuthCalls++;
+          await new Promise((r) => setTimeout(r, 150));
+          return {
+            id: "postiz_int_concurrent_result",
+            provider,
+            name: `${provider} Concurrent Account`,
+            pictureUrl: null,
+            isActive: true,
+          };
+        });
+
+      try {
+        // 2. Fire TWO concurrent resolution requests for the exact same state & code
+        const [res1, res2] = await Promise.all([
+          fetch(`${baseUrl}/api/v1/channels/oauth/resolve`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Cookie: cookieA,
+            },
+            body: JSON.stringify({
+              state: stateToResolveE,
+              code: "code_concurrent_123",
+              provider: "x",
+            }),
+          }),
+          fetch(`${baseUrl}/api/v1/channels/oauth/resolve`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Cookie: cookieA,
+            },
+            body: JSON.stringify({
+              state: stateToResolveE,
+              code: "code_concurrent_123",
+              provider: "x",
+            }),
+          }),
+        ]);
+
+        // Both concurrent calls must succeed with 200
+        expect(res1.status).toBe(200);
+        expect(res2.status).toBe(200);
+
+        const body1 = await res1.json();
+        const body2 = await res2.json();
+        expect(body1.data.success).toBe(true);
+        expect(body2.data.success).toBe(true);
+        expect(body1.data.channel.id).toBe(body2.data.channel.id);
+
+        // Engine completion must only be called ONCE (single-flight deduplicated)
+        expect(completeOAuthCalls).toBe(1);
+
+        // Workspace must have only one channel assignment for this integration
+        const channels = await prisma.workspaceChannel.findMany({
+          where: {
+            workspaceId: workspaceAId,
+            postizIntegrationId: "postiz_int_concurrent_result",
+          },
+        });
+        expect(channels.length).toBe(1);
+      } finally {
+        mockPublishingEngine.completeOAuth = originalComplete;
+      }
+    });
+
     it("7. Posts Targeting: Workspace A creates draft targeting assigned channel", async () => {
       const res = await fetch(
         `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts`,
@@ -423,7 +631,7 @@ describe(
       expect(pubBody.data.publishedAt).toBeNull();
       expect(mockPublishingEngine.publishNow).toHaveBeenCalled();
 
-      // Test Status Reconciliation Endpoint
+      // Test Status Reconciliation Endpoint (QUEUE state preserves PROCESSING)
       const reconcileRes = await fetch(
         `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts/${postId}/reconcile`,
         {
@@ -435,6 +643,297 @@ describe(
       const recBody = await reconcileRes.json();
       expect(recBody.data.id).toBe(postId);
       expect(recBody.data.status).toBe("PROCESSING");
+
+      // Once engine reports PUBLISHED, post & target reconcile to PUBLISHED with providerPostUrl
+      mockPublishingEngine.getPostStatus = vi.fn().mockResolvedValue({
+        enginePostId: "mock_pub_postiz_int_alpha_1",
+        state: "PUBLISHED",
+        releaseUrl: "https://facebook.com/12345/posts/67890",
+        releaseId: "fb_67890",
+      });
+
+      const publishedReconcileRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts/${postId}/reconcile`,
+        {
+          method: "POST",
+          headers: { Cookie: cookieA },
+        },
+      );
+      expect(publishedReconcileRes.status).toBe(200);
+      const pubRecBody = await publishedReconcileRes.json();
+      expect(pubRecBody.data.status).toBe("PUBLISHED");
+      expect(pubRecBody.data.targets[0].status).toBe("PUBLISHED");
+      expect(pubRecBody.data.targets[0].providerPostUrl).toBe(
+        "https://facebook.com/12345/posts/67890",
+      );
+    });
+
+    it("9b. Media Publishing: Post with attached media transfers reachable R2 presigned URLs into engine payload", async () => {
+      // Create a ready media asset in workspace A
+      const mediaAsset = await prisma.mediaAsset.create({
+        data: {
+          workspaceId: workspaceAId,
+          kind: "IMAGE",
+          objectKey: `workspaces/${workspaceAId}/media/test-photo.png`,
+          originalName: "test-photo.png",
+          mimeType: "image/png",
+          byteSize: BigInt(12345),
+          status: "READY",
+        },
+      });
+
+      // Create draft targeting channel A with attached media
+      const createRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookieA,
+          },
+          body: JSON.stringify({
+            content: "Post with attached photo",
+            channelIds: [channelAId],
+            mediaAssetIds: [mediaAsset.id],
+          }),
+        },
+      );
+      expect(createRes.status).toBe(201);
+      const draft = await createRes.json();
+      const postId = draft.data.id;
+      expect(draft.data.media).toHaveLength(1);
+
+      // Publish Now
+      const pubRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts/${postId}/publish`,
+        {
+          method: "POST",
+          headers: { Cookie: cookieA },
+        },
+      );
+
+      expect(pubRes.status).toBe(200);
+      const pubBody = await pubRes.json();
+      expect(pubBody.data.status).toBe("PROCESSING");
+
+      // Verify publishingEngine was called with structured media containing id and url
+      expect(mockPublishingEngine.publishNow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: "Post with attached photo",
+          channelIds: ["postiz_int_alpha"],
+          media: expect.arrayContaining([
+            expect.objectContaining({
+              id: mediaAsset.id,
+              url: expect.stringMatching(/test-photo\.png/),
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it("9c. Multi-Photo Publishing: preserves position ordering for multi-image Facebook album posts", async () => {
+      const img1 = await prisma.mediaAsset.create({
+        data: {
+          workspaceId: workspaceAId,
+          kind: "IMAGE",
+          objectKey: `workspaces/${workspaceAId}/media/photo-1.png`,
+          originalName: "photo-1.png",
+          mimeType: "image/png",
+          byteSize: BigInt(1000),
+          status: "READY",
+        },
+      });
+
+      const img2 = await prisma.mediaAsset.create({
+        data: {
+          workspaceId: workspaceAId,
+          kind: "IMAGE",
+          objectKey: `workspaces/${workspaceAId}/media/photo-2.png`,
+          originalName: "photo-2.png",
+          mimeType: "image/png",
+          byteSize: BigInt(2000),
+          status: "READY",
+        },
+      });
+
+      const createRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookieA,
+          },
+          body: JSON.stringify({
+            content: "Multi-photo album post",
+            channelIds: [channelAId],
+            mediaAssetIds: [img1.id, img2.id],
+          }),
+        },
+      );
+      expect(createRes.status).toBe(201);
+      const postData = (await createRes.json()).data;
+
+      const pubRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts/${postData.id}/publish`,
+        {
+          method: "POST",
+          headers: { Cookie: cookieA },
+        },
+      );
+      expect(pubRes.status).toBe(200);
+
+      // Verify that media payload is ordered position 0, then position 1
+      expect(mockPublishingEngine.publishNow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: "Multi-photo album post",
+          channelIds: ["postiz_int_alpha"],
+          media: [
+            expect.objectContaining({ id: img1.id }),
+            expect.objectContaining({ id: img2.id }),
+          ],
+        }),
+      );
+    });
+
+    it("9d. Mixed Media Rejection: rejects mixing images and videos with 400 validation error", async () => {
+      const img = await prisma.mediaAsset.create({
+        data: {
+          workspaceId: workspaceAId,
+          kind: "IMAGE",
+          objectKey: `workspaces/${workspaceAId}/media/sample-photo.png`,
+          originalName: "sample-photo.png",
+          mimeType: "image/png",
+          byteSize: BigInt(1000),
+          status: "READY",
+        },
+      });
+
+      const video = await prisma.mediaAsset.create({
+        data: {
+          workspaceId: workspaceAId,
+          kind: "VIDEO",
+          objectKey: `workspaces/${workspaceAId}/media/sample-clip.mp4`,
+          originalName: "sample-clip.mp4",
+          mimeType: "video/mp4",
+          byteSize: BigInt(5000),
+          status: "READY",
+        },
+      });
+
+      // Attempt creating draft with both an image and a video
+      const createRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookieA,
+          },
+          body: JSON.stringify({
+            content: "Mixed media post",
+            channelIds: [channelAId],
+            mediaAssetIds: [img.id, video.id],
+          }),
+        },
+      );
+      expect(createRes.status).toBe(400);
+      const body = await createRes.json();
+      expect(body.error?.message || body.message).toMatch(/mixing images and videos/i);
+    });
+
+    it("9e. Multiple Video Rejection: rejects attaching multiple videos with 400 validation error", async () => {
+      const vid1 = await prisma.mediaAsset.create({
+        data: {
+          workspaceId: workspaceAId,
+          kind: "VIDEO",
+          objectKey: `workspaces/${workspaceAId}/media/clip-1.mp4`,
+          originalName: "clip-1.mp4",
+          mimeType: "video/mp4",
+          byteSize: BigInt(5000),
+          status: "READY",
+        },
+      });
+
+      const vid2 = await prisma.mediaAsset.create({
+        data: {
+          workspaceId: workspaceAId,
+          kind: "VIDEO",
+          objectKey: `workspaces/${workspaceAId}/media/clip-2.mp4`,
+          originalName: "clip-2.mp4",
+          mimeType: "video/mp4",
+          byteSize: BigInt(6000),
+          status: "READY",
+        },
+      });
+
+      const createRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookieA,
+          },
+          body: JSON.stringify({
+            content: "Two videos post",
+            channelIds: [channelAId],
+            mediaAssetIds: [vid1.id, vid2.id],
+          }),
+        },
+      );
+      expect(createRes.status).toBe(400);
+      const body = await createRes.json();
+      expect(body.error?.message || body.message).toMatch(/multiple videos/i);
+    });
+
+    it("9f. Failure Status Reconciliation: transitions to FAILED when remote engine reports ERROR", async () => {
+      const createRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookieA,
+          },
+          body: JSON.stringify({
+            content: "Post that will fail on remote provider",
+            channelIds: [channelAId],
+          }),
+        },
+      );
+      const draft = await createRes.json();
+      const failPostId = draft.data.id;
+
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts/${failPostId}/publish`,
+        {
+          method: "POST",
+          headers: { Cookie: cookieA },
+        },
+      );
+
+      // Mock remote engine returning ERROR
+      mockPublishingEngine.getPostStatus = vi.fn().mockResolvedValue({
+        enginePostId: "mock_pub_postiz_int_alpha_1",
+        state: "ERROR",
+        error: "Facebook API rejected: invalid dimensions",
+      });
+
+      const reconcileRes = await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceAId}/posts/${failPostId}/reconcile`,
+        {
+          method: "POST",
+          headers: { Cookie: cookieA },
+        },
+      );
+      expect(reconcileRes.status).toBe(200);
+      const recBody = await reconcileRes.json();
+      expect(recBody.data.status).toBe("FAILED");
+      expect(recBody.data.targets[0].status).toBe("FAILED");
+      expect(recBody.data.targets[0].lastError).toBe(
+        "Facebook API rejected: invalid dimensions",
+      );
     });
 
     it("10. Scheduling: Schedule Post hands off to engine and marks targets & post SCHEDULED", async () => {
@@ -557,8 +1056,8 @@ describe(
         (t: any) => t.channelId === channelBId,
       );
 
-      expect(targetAlpha.postizPostId).toBe("mock_pub_postiz_int_alpha_1");
-      expect(targetBeta.postizPostId).toBe("mock_pub_postiz_int_beta_2");
+      expect(targetAlpha.postizPostId).toMatch(/^mock_pub_postiz_int_alpha_\d+$/);
+      expect(targetBeta.postizPostId).toMatch(/^mock_pub_postiz_int_beta_\d+$/);
       expect(targetAlpha.postizPostId).not.toBe(targetBeta.postizPostId);
 
       // 4. Cancel multi-target post
@@ -578,10 +1077,10 @@ describe(
 
       // Verify cancelPost was called for both engine post IDs
       expect(mockPublishingEngine.cancelPost).toHaveBeenCalledWith(
-        "mock_pub_postiz_int_alpha_1",
+        targetAlpha.postizPostId,
       );
       expect(mockPublishingEngine.cancelPost).toHaveBeenCalledWith(
-        "mock_pub_postiz_int_beta_2",
+        targetBeta.postizPostId,
       );
     });
 

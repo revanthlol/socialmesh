@@ -67,6 +67,33 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
     expect(mockClient.getConnectUrl).toHaveBeenCalledWith(
       "facebook",
       undefined,
+      undefined,
+    );
+  });
+
+  it("completeOAuth() completes token exchange and normalizes channel", async () => {
+    vi.spyOn(mockClient, "completeSocialConnection").mockResolvedValue({
+      id: "pz_int_fb_1",
+      name: "Acme Facebook Page",
+      identifier: "facebook",
+      picture: "https://example.com/fb.png",
+      disabled: false,
+    });
+    const channel = await engine.completeOAuth("facebook", {
+      code: "code123",
+      state: "state123",
+    });
+    expect(channel).toEqual({
+      id: "pz_int_fb_1",
+      provider: "facebook",
+      name: "Acme Facebook Page",
+      pictureUrl: "https://example.com/fb.png",
+      isActive: true,
+    });
+    expect(mockClient.completeSocialConnection).toHaveBeenCalledWith(
+      "facebook",
+      { code: "code123", state: "state123" },
+      undefined,
     );
   });
 
@@ -128,6 +155,7 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
     const result = await engine.publishNow({
       content: "Breaking news!",
       channelIds: ["int_1"],
+      media: [{ id: "asset-1", url: "https://r2.example.com/asset-1.png" }],
     });
 
     expect(result).toEqual({
@@ -136,6 +164,14 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
       scheduledFor: undefined,
       channelResults: [{ channelId: "int_1", enginePostId: "pz_now_303" }],
     });
+    expect(mockClient.publishNow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "Breaking news!",
+        integrations: ["int_1"],
+        media: [{ id: "asset-1", path: "https://r2.example.com/asset-1.png" }],
+      }),
+      undefined,
+    );
   });
 
   it("cancelPost() returns success flag", async () => {
@@ -163,5 +199,78 @@ describe("PostizPublishingEngine (Service Abstraction)", () => {
       name: "asset.png",
       mimeType: "image/png",
     });
+  });
+
+  it("getPostStatus() finds post and normalizes state and releaseUrl", async () => {
+    vi.spyOn(mockClient, "listPosts").mockResolvedValue([
+      {
+        id: "pz_post_published",
+        state: "PUBLISHED",
+        releaseURL: "https://facebook.com/123/posts/456",
+        releaseId: "fb_456",
+      },
+    ]);
+
+    const status = await engine.getPostStatus("pz_post_published");
+    expect(status).toEqual({
+      enginePostId: "pz_post_published",
+      state: "PUBLISHED",
+      releaseUrl: "https://facebook.com/123/posts/456",
+      releaseId: "fb_456",
+      error: null,
+    });
+  });
+
+  it("getPostStatus() normalizes ERROR state and error message", async () => {
+    vi.spyOn(mockClient, "listPosts").mockResolvedValue([
+      {
+        id: "pz_post_failed",
+        state: "ERROR",
+        error: "Photos should be less than 10 MB",
+      } as any,
+    ]);
+
+    const status = await engine.getPostStatus("pz_post_failed");
+    expect(status).toEqual({
+      enginePostId: "pz_post_failed",
+      state: "ERROR",
+      releaseUrl: null,
+      releaseId: null,
+      error: "Photos should be less than 10 MB",
+    });
+  });
+
+  it("getChannelAnalytics() normalizes metrics and strips fake hardcoded percentageChange", async () => {
+    vi.spyOn(mockClient, "getAnalytics").mockResolvedValue([
+      {
+        label: "Impressions",
+        percentageChange: 5, // Fake value from Postiz
+        data: [
+          { date: "2026-09-01", total: 100 },
+          { date: "2026-09-02", total: 100 },
+          { date: "2026-09-03", total: 150 },
+          { date: "2026-09-04", total: 150 },
+        ],
+      },
+    ]);
+
+    const analytics = await engine.getChannelAnalytics("int_fb_1", 30);
+    expect(analytics.available).toBe(true);
+    expect(analytics.days).toBe(30);
+    expect(analytics.metrics).toHaveLength(1);
+    expect(analytics.metrics[0]!.total).toBe(500);
+    // Calculated real change: first half (200) -> second half (300) = +50%
+    expect(analytics.metrics[0]!.percentageChange).toBe(50);
+  });
+
+  it("getChannelAnalytics() handles client error gracefully", async () => {
+    vi.spyOn(mockClient, "getAnalytics").mockRejectedValue(
+      new Error("Postiz analytics endpoint 404"),
+    );
+
+    const analytics = await engine.getChannelAnalytics("int_invalid", 30);
+    expect(analytics.available).toBe(false);
+    expect(analytics.metrics).toEqual([]);
+    expect(analytics.reason).toMatch(/404/);
   });
 });

@@ -10,6 +10,7 @@ import { authRouter } from "./modules/auth/auth.routes.js";
 import { workspaceRouter } from "./modules/workspaces/workspace.routes.js";
 import { publishingRouter } from "./modules/publishing/publishing.routes.js";
 import { channelsOAuthRouter } from "./modules/channels/channels.routes.js";
+import { publicMediaRouter } from "./modules/media/media.routes.js";
 import { requireAuth } from "./middleware/auth.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -65,6 +66,7 @@ export function createApp() {
   apiV1Router.use("/auth", authRouter);
   apiV1Router.use("/workspaces", workspaceRouter);
   apiV1Router.use("/channels", requireAuth, channelsOAuthRouter);
+  apiV1Router.use("/media", publicMediaRouter);
   apiV1Router.use("/publishing", publishingRouter);
 
   app.use("/api/v1", apiV1Router);

@@ -1,611 +1,268 @@
-import { useState, useEffect, type FormEvent } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import {
-  PenSquare,
-  Image as ImageIcon,
-  Save,
-  Send,
-  Calendar,
-  CheckCircle2,
-  AlertCircle,
-  Share2,
-  Plus,
-  X,
-  ExternalLink,
-} from "lucide-react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { AlertCircle, CalendarClock, Check, Image as ImageIcon, LoaderCircle, Plus, Send, Trash2, Upload, Video, X } from "lucide-react";
 import { usePost, usePosts } from "../hooks/usePosts.js";
-import { useMediaList } from "../hooks/useMedia.js";
+import { isSupportedMediaFile, SUPPORTED_MEDIA_TYPES, useMediaActions, useMediaList } from "../hooks/useMedia.js";
 import { useChannels } from "../hooks/useChannels.js";
 import { usePublishingStatus } from "../hooks/usePublishingStatus.js";
 import { Button } from "../components/ui/Button.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { Textarea } from "../components/ui/Textarea.js";
-import { Input } from "../components/ui/Input.js";
-import { Badge } from "../components/ui/Badge.js";
 import type { MediaAsset, WorkspaceChannel } from "../api/types.js";
+
+const MAX_MEDIA = 10;
+
+function formatProvider(provider: string) {
+  const labels: Record<string, string> = { x: "X", twitter: "X", "linkedin-page": "LinkedIn Page", linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", youtube: "YouTube", pinterest: "Pinterest", reddit: "Reddit", devto: "Dev.to" };
+  return labels[provider.toLowerCase()] || provider;
+}
 
 export function ComposePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editPostId = searchParams.get("postId");
-
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const [content, setContent] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<MediaAsset[]>([]);
   const [selectedChannelIds, setSelectedChannelIds] = useState<string[]>([]);
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduledDateTime, setScheduledDateTime] = useState("");
-  const [statusMessage, setStatusMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploadBatchActive, setIsUploadBatchActive] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const { data: existingPost, isLoading: postLoading } = usePost(
-    workspaceId,
-    editPostId || undefined,
-  );
-  const { data: mediaLibrary = [], isLoading: mediaLoading } =
-    useMediaList(workspaceId);
-  const { channels = [], isLoading: channelsLoading } =
-    useChannels(workspaceId);
-  const { isConnected: isEngineConnected } = usePublishingStatus();
-
-  const {
-    createDraft,
-    isCreating,
-    updateDraft,
-    isUpdating,
-    publishPost,
-    isPublishing,
-    schedulePost,
-    isScheduling: isSchedulePending,
-  } = usePosts(workspaceId);
+  const { data: existingPost, isLoading: postLoading } = usePost(workspaceId, editPostId || undefined);
+  const { data: mediaLibrary = [], isLoading: mediaLoading, isError: mediaLoadError } = useMediaList(workspaceId);
+  const { channels = [], isLoading: channelsLoading } = useChannels(workspaceId);
+  const { isConnected: isPublishingAvailable } = usePublishingStatus();
+  const { uploadMedia, isUploading, uploadProgress } = useMediaActions(workspaceId);
+  const { createDraft, isCreating, updateDraft, isUpdating, publishPost, isPublishing, schedulePost, isScheduling: isSchedulePending } = usePosts(workspaceId);
 
   useEffect(() => {
-    if (existingPost) {
-      setContent(existingPost.content);
-      const attached = existingPost.media
-        .map((m) => m.asset)
-        .filter(Boolean) as MediaAsset[];
-      setSelectedMedia(attached);
-
-      const channelIds = (existingPost.targets || [])
-        .map((t) => t.channelId)
-        .filter(Boolean) as string[];
-      setSelectedChannelIds(channelIds);
-
-      if (existingPost.scheduledFor) {
-        setIsScheduling(true);
-        // format ISO date to YYYY-MM-DDTHH:mm for datetime-local input
-        const d = new Date(existingPost.scheduledFor);
-        const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-          .toISOString()
-          .slice(0, 16);
-        setScheduledDateTime(localIso);
-      }
+    if (!existingPost) return;
+    setContent(existingPost.content);
+    setSelectedMedia(existingPost.media.map(({ asset }) => asset).filter((asset): asset is MediaAsset => Boolean(asset)));
+    setSelectedChannelIds(existingPost.targets.map(({ channelId }) => channelId).filter((id): id is string => Boolean(id)));
+    if (existingPost.scheduledFor) {
+      setIsScheduling(true);
+      const date = new Date(existingPost.scheduledFor);
+      setScheduledDateTime(new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16));
     }
   }, [existingPost]);
 
+  const hasImages = selectedMedia.some((asset) => asset.kind === "IMAGE");
+  const videoCount = selectedMedia.filter((asset) => asset.kind === "VIDEO").length;
+  const mediaValidation = hasImages && videoCount > 0
+    ? "Facebook and most social platforms don’t allow photos and videos in the same post. Choose one media type."
+    : videoCount > 1
+      ? "Facebook does not support uploading multiple videos in one post. Remove extra videos to continue."
+      : null;
+  const isBusy = isCreating || isUpdating || isPublishing || isSchedulePending || isUploading || isUploadBatchActive;
+  const readyMedia = mediaLibrary.filter((asset) => asset.status === "READY");
+
   function toggleChannel(channelId: string) {
-    if (selectedChannelIds.includes(channelId)) {
-      setSelectedChannelIds(
-        selectedChannelIds.filter((id) => id !== channelId),
-      );
-    } else {
-      setSelectedChannelIds([...selectedChannelIds, channelId]);
-    }
+    setSelectedChannelIds((current) => current.includes(channelId) ? current.filter((id) => id !== channelId) : [...current, channelId]);
   }
 
   function toggleMediaSelection(asset: MediaAsset) {
-    if (selectedMedia.some((m) => m.id === asset.id)) {
-      setSelectedMedia(selectedMedia.filter((m) => m.id !== asset.id));
-    } else {
-      if (selectedMedia.length >= 10) {
-        alert("Maximum 10 media items can be attached to a post.");
-        return;
+    setSelectedMedia((current) => {
+      if (current.some((item) => item.id === asset.id)) return current.filter((item) => item.id !== asset.id);
+      if (current.length >= MAX_MEDIA) {
+        setStatusMessage({ type: "error", text: "A post can include up to 10 media items." });
+        return current;
       }
-      setSelectedMedia([...selectedMedia, asset]);
-    }
+      return [...current, asset];
+    });
   }
 
-  async function handleSaveDraft(e?: FormEvent) {
-    if (e) e.preventDefault();
+  async function handleUpload(files: FileList | File[]) {
+    const queue = Array.from(files);
+    if (!queue.length) return;
+    setStatusMessage(null);
+    setIsUploadBatchActive(true);
+    let attached = 0;
+    const errors: string[] = [];
+    try {
+      for (const file of queue) {
+        if (selectedMedia.length + attached >= MAX_MEDIA) {
+          errors.push("A post can include up to 10 media items. The remaining files were not uploaded.");
+          break;
+        }
+        if (!isSupportedMediaFile(file)) {
+          errors.push(`${file.name} isn’t a supported file. Choose JPG, PNG, WEBP, GIF, MP4, or MOV.`);
+          continue;
+        }
+        try {
+          const asset = await uploadMedia(file);
+          setSelectedMedia((current) => current.length < MAX_MEDIA ? [...current, asset] : current);
+          attached += 1;
+        } catch (error) {
+          errors.push(error instanceof Error ? `${file.name}: ${error.message}` : `Could not upload ${file.name}.`);
+        }
+      }
+    } finally {
+      setIsUploadBatchActive(false);
+    }
+    if (errors.length) setStatusMessage({ type: "error", text: `${attached ? `${attached} file${attached === 1 ? "" : "s"} added. ` : ""}${errors.slice(0, 2).join(" ")}${errors.length > 2 ? " More files could not be uploaded." : ""}` });
+    else if (attached) setStatusMessage({ type: "success", text: attached === 1 ? "Media uploaded and added to this post." : `${attached} files uploaded and added to this post.` });
+    if (uploadInputRef.current) uploadInputRef.current.value = "";
+  }
+
+  function onFileChange(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.files) void handleUpload(event.target.files);
+  }
+
+  function onDrop(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+    void handleUpload(event.dataTransfer.files);
+  }
+
+  async function handleSaveDraft(event?: FormEvent) {
+    event?.preventDefault();
     if (!content.trim()) {
-      setStatusMessage({
-        type: "error",
-        text: "Please enter some content for your draft.",
-      });
+      setStatusMessage({ type: "error", text: "Write some post text before saving." });
       return null;
     }
-
     setStatusMessage(null);
-
     try {
-      const mediaAssetIds = selectedMedia.map((m) => m.id);
-      const scheduledIso =
-        isScheduling && scheduledDateTime
-          ? new Date(scheduledDateTime).toISOString()
-          : null;
-
-      if (editPostId) {
-        const updated = await updateDraft({
-          postId: editPostId,
-          data: {
-            content: content.trim(),
-            mediaAssetIds,
-            channelIds: selectedChannelIds,
-            scheduledFor: scheduledIso,
-          },
-        });
-        setStatusMessage({
-          type: "success",
-          text: "Draft updated successfully.",
-        });
-        return updated;
-      } else {
-        const created = await createDraft({
-          content: content.trim(),
-          mediaAssetIds,
-          channelIds: selectedChannelIds,
-          scheduledFor: scheduledIso,
-        });
-        setStatusMessage({
-          type: "success",
-          text: "Draft saved successfully.",
-        });
-        return created;
-      }
-    } catch (err: any) {
-      setStatusMessage({
-        type: "error",
-        text: err.message || "Failed to save draft.",
-      });
+      const data = { content: content.trim(), mediaAssetIds: selectedMedia.map((asset) => asset.id), channelIds: selectedChannelIds, scheduledFor: null };
+      const post = editPostId
+        ? await updateDraft({ postId: editPostId, data })
+        : await createDraft(data);
+      setStatusMessage({ type: "success", text: editPostId ? "Draft updated." : "Draft saved." });
+      return post;
+    } catch (error) {
+      setStatusMessage({ type: "error", text: error instanceof Error ? error.message : "Could not save this draft." });
       return null;
     }
   }
 
   async function handlePublishNow() {
-    if (selectedChannelIds.length === 0) {
-      setStatusMessage({
-        type: "error",
-        text: "Please select at least one channel to publish to.",
-      });
+    if (!selectedChannelIds.length) {
+      setStatusMessage({ type: "error", text: "Choose at least one destination to publish." });
       return;
     }
-
+    if (mediaValidation) {
+      setStatusMessage({ type: "error", text: mediaValidation });
+      return;
+    }
     setStatusMessage(null);
-
     try {
-      // First save draft with current content & channels
       const post = await handleSaveDraft();
       if (!post) return;
-
-      // Now publish immediately through engine
       await publishPost(post.id);
-      setStatusMessage({
-        type: "success",
-        text: "Post accepted by publishing engine and processing!",
-      });
-      setTimeout(() => navigate(`/app/${workspaceId}/posts`), 1200);
-    } catch (err: any) {
-      setStatusMessage({
-        type: "error",
-        text:
-          err.message ||
-          "Publishing failed. Please check your social channel credentials in Postiz.",
-      });
+      setStatusMessage({ type: "success", text: "Post submitted for publishing." });
+      window.setTimeout(() => navigate(`/app/${workspaceId}/posts`), 900);
+    } catch (error) {
+      setStatusMessage({ type: "error", text: error instanceof Error ? error.message : "Publishing failed. Check the selected account connections." });
     }
   }
 
   async function handleSchedulePost() {
-    if (selectedChannelIds.length === 0) {
-      setStatusMessage({
-        type: "error",
-        text: "Please select at least one channel to schedule for.",
-      });
+    if (!selectedChannelIds.length) {
+      setStatusMessage({ type: "error", text: "Choose at least one destination to schedule." });
       return;
     }
-
-    if (!scheduledDateTime) {
-      setStatusMessage({
-        type: "error",
-        text: "Please select a date and time for scheduling.",
-      });
+    if (mediaValidation) {
+      setStatusMessage({ type: "error", text: mediaValidation });
       return;
     }
-
-    const scheduledDate = new Date(scheduledDateTime);
-    if (scheduledDate.getTime() <= Date.now()) {
-      setStatusMessage({
-        type: "error",
-        text: "Scheduled date and time must be in the future.",
-      });
+    if (!scheduledDateTime || new Date(scheduledDateTime).getTime() <= Date.now()) {
+      setStatusMessage({ type: "error", text: "Choose a future date and time." });
       return;
     }
-
     setStatusMessage(null);
-
     try {
-      // First save draft
       const post = await handleSaveDraft();
       if (!post) return;
-
-      // Schedule through Postiz/Temporal
-      await schedulePost({
-        postId: post.id,
-        scheduledFor: scheduledDate.toISOString(),
-      });
-
-      setStatusMessage({
-        type: "success",
-        text: "Post scheduled successfully!",
-      });
-      setTimeout(() => navigate(`/app/${workspaceId}/posts`), 1200);
-    } catch (err: any) {
-      setStatusMessage({
-        type: "error",
-        text: err.message || "Failed to schedule post.",
-      });
+      await schedulePost({ postId: post.id, scheduledFor: new Date(scheduledDateTime).toISOString() });
+      setStatusMessage({ type: "success", text: "Post scheduled." });
+      window.setTimeout(() => navigate(`/app/${workspaceId}/posts`), 900);
+    } catch (error) {
+      setStatusMessage({ type: "error", text: error instanceof Error ? error.message : "Could not schedule this post." });
     }
   }
 
-  if (editPostId && postLoading) {
-    return (
-      <div className="p-4 sm:p-6 md:p-8 max-w-4xl w-full mx-auto space-y-6">
-        <Skeleton className="h-8 w-60" />
-        <Skeleton className="h-28 w-full rounded border border-[#c9c5bb] dark:border-white/[0.08]" />
-        <Skeleton className="h-44 w-full rounded border border-[#c9c5bb] dark:border-white/[0.08]" />
-      </div>
-    );
-  }
-
-  const isBusy = isCreating || isUpdating || isPublishing || isSchedulePending;
+  if (editPostId && postLoading) return <div className="page-shell space-y-4" aria-label="Loading post"><Skeleton className="h-10 w-52" /><Skeleton className="h-72 w-full" /></div>;
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 max-w-4xl w-full mx-auto space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#c9c5bb] dark:border-white/[0.08]">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-serif font-bold text-[#161a1d] dark:text-white">
-              {editPostId ? "Edit Publication" : "Compose Publication"}
-            </h1>
+    <div className="page-shell compose-workspace">
+      <header className="compose-heading">
+        <div><h1>{editPostId ? "Edit post" : "Compose post"}</h1><p>Write once, then choose where and when it goes out.</p></div>
+        <Link to={`/app/${workspaceId}/posts`} className="compose-cancel">Close</Link>
+      </header>
 
-          </div>
-          <p className="text-xs text-[#6b706f] dark:text-zinc-500 mt-1">
-            Author and refine post copy, attach media, select workspace
-            channels, and publish.
-          </p>
-        </div>
-      </div>
+      {!isPublishingAvailable && <p className="compose-offline" role="status"><AlertCircle size={15} /> Publishing is unavailable right now. You can still save this as a draft.</p>}
+      {statusMessage && <p className={`compose-feedback ${statusMessage.type}`} role={statusMessage.type === "error" ? "alert" : "status"} aria-live="polite">{statusMessage.type === "error" ? <AlertCircle size={16} /> : <Check size={16} />}{statusMessage.text}<button type="button" aria-label="Dismiss message" onClick={() => setStatusMessage(null)}><X size={15} /></button></p>}
 
-      {statusMessage && (
-        <div
-          className={`p-3 rounded text-xs flex items-center justify-between border ${
-            statusMessage.type === "success"
-              ? "bg-[#e9f2eb] text-[#24613b] border-[#c5e0cb]"
-              : "bg-[#fbeeed] text-[#b23a24] dark:text-[#e05a3a] border-[#f4c6bf]"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {statusMessage.type === "success" ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-            ) : (
-              <AlertCircle className="h-4 w-4 shrink-0" />
-            )}
-            <span>{statusMessage.text}</span>
-          </div>
-          <button
-            onClick={() => setStatusMessage(null)}
-            className="text-current font-bold opacity-60 hover:opacity-100 cursor-pointer"
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <form className="compose-layout" onSubmit={handleSaveDraft}>
+        <section className="compose-editor">
+          <label className="compose-field-label" htmlFor="post-content">Post</label>
+          <Textarea id="post-content" rows={10} value={content} onChange={(event) => setContent(event.target.value)} placeholder="What would you like to share?" className="compose-textarea" />
+          <div className="compose-editor-meta"><span>{content.length > 0 ? `${content.length} characters` : "Your post text"}</span><span>Up to 10 media items</span></div>
 
-      {/* Offline Notice banner if publishing engine is down */}
-      {!isEngineConnected && (
-        <div className="p-3 rounded border border-[#f4c6bf] bg-[#fbeeed] text-xs text-[#b23a24] dark:text-[#e05a3a] flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>
-            Publishing services are temporarily offline. You can save drafts locally, and publishing will resume once the service reconnects.
-          </span>
-        </div>
-      )}
-
-      <div className="space-y-6">
-        {/* Workspace Channels Picker */}
-        <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] dark:text-zinc-400 flex items-center gap-2">
-              <Share2 className="h-3.5 w-3.5" /> Target Workspace Channels (
-              {selectedChannelIds.length} selected)
-            </span>
-            <button
-              type="button"
-              onClick={() => navigate(`/app/${workspaceId}/accounts`)}
-              className="text-[11px] text-[#6b706f] dark:text-zinc-500 hover:text-[#161a1d] dark:text-white underline cursor-pointer"
-            >
-              Manage Channels
-            </button>
-          </div>
-
-          {channelsLoading ? (
-            <p className="text-xs font-mono text-[#6b706f] dark:text-zinc-500">
-              Loading channels...
-            </p>
-          ) : channels.length === 0 ? (
-            <div className="p-3 rounded border border-dashed border-[#c9c5bb] dark:border-white/[0.08] bg-white text-xs text-[#6b706f] dark:text-zinc-500 flex items-center justify-between">
-              <span>No channels assigned to this workspace yet.</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => navigate(`/app/${workspaceId}/accounts`)}
-              >
-                Assign Channels
-              </Button>
+          <section className="compose-media" aria-labelledby="compose-media-heading">
+            <div className="compose-section-heading"><h2 id="compose-media-heading">Media</h2><span>{selectedMedia.length}/{MAX_MEDIA}</span></div>
+            <div className={`compose-dropzone ${isDragging ? "is-dragging" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragging(false); }} onDrop={onDrop}>
+              <input ref={uploadInputRef} className="sr-only" type="file" accept={SUPPORTED_MEDIA_TYPES.join(",")} multiple onChange={onFileChange} aria-label="Choose media files to upload" />
+              <div className="dropzone-copy"><span className="dropzone-icon"><Upload size={17} /></span><div><strong>Drop media here</strong><span>Images and videos, up to {MAX_MEDIA} items</span></div></div>
+              <div className="dropzone-actions"><Button type="button" variant="outline" size="sm" onClick={() => uploadInputRef.current?.click()} disabled={isBusy}><Upload size={14} />Upload from device</Button><Button type="button" variant="ghost" size="sm" onClick={() => setIsMediaPickerOpen((open) => !open)}><ImageIcon size={14} />{isMediaPickerOpen ? "Close library" : "Choose from library"}</Button></div>
+              {isUploading && <div className="compose-upload-progress" role="status"><div><LoaderCircle size={14} className="compose-spin" />Uploading media<span>{uploadProgress ?? 0}%</span></div><progress value={uploadProgress ?? 0} max={100} aria-label="Media upload progress" /></div>}
             </div>
-          ) : (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {channels.map((ch) => {
-                const isSelected = selectedChannelIds.includes(ch.id);
-                return (
-                  <button
-                    key={ch.id}
-                    type="button"
-                    onClick={() => toggleChannel(ch.id)}
-                    className={`px-3 py-1.5 rounded border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
-                      isSelected
-                        ? "bg-[#161a1d] text-white border-[#161a1d]"
-                        : "bg-white text-[#4c5359] dark:text-zinc-400 border-[#c9c5bb] dark:border-white/[0.08] hover:border-[#161a1d]"
-                    }`}
-                  >
-                    {ch.pictureUrl ? (
-                      <img
-                        src={ch.pictureUrl}
-                        alt={ch.name}
-                        className="h-4 w-4 rounded-full object-cover"
-                      />
-                    ) : (
-                      <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                    )}
-                    <span>{ch.name}</span>
-                    <span className="text-[10px] opacity-70 uppercase font-mono">
-                      ({ch.provider})
-                    </span>
-                  </button>
-                );
-              })}
+
+            {mediaValidation && <p className="compose-validation" role="alert"><AlertCircle size={15} />{mediaValidation}</p>}
+            {selectedMedia.length > 0 && <ol className="compose-attachments" aria-label="Attached media in publishing order">{selectedMedia.map((asset, index) => <li key={asset.id}>
+              <span className="attachment-order">{index + 1}</span>
+              <div className="attachment-preview">{asset.kind === "IMAGE" && asset.viewUrl ? <img src={asset.viewUrl} alt={asset.originalName} /> : asset.kind === "VIDEO" && asset.viewUrl ? <video src={asset.viewUrl} preload="metadata" aria-label={asset.originalName} /> : asset.kind === "VIDEO" ? <Video size={20} /> : <ImageIcon size={20} />}</div>
+              <div className="attachment-info"><strong title={asset.originalName}>{asset.originalName}</strong><span>{asset.kind === "VIDEO" ? "Video" : "Image"}</span></div>
+              <button type="button" className="attachment-remove" aria-label={`Remove ${asset.originalName} from this post`} onClick={() => setSelectedMedia((items) => items.filter((item) => item.id !== asset.id))}><X size={16} /></button>
+            </li>)}</ol>}
+
+            {isMediaPickerOpen && <div className="compose-library" aria-label="Choose from media library">
+              <div className="compose-library-heading"><strong>Media library</strong><span>{mediaLoading ? "Loading…" : `${readyMedia.length} ready`}</span></div>
+              {mediaLoading ? <div className="compose-library-loading"><Skeleton className="h-16 w-16" /><Skeleton className="h-16 w-16" /><Skeleton className="h-16 w-16" /></div> : mediaLoadError ? <p className="compose-library-empty" role="alert">Couldn’t load your media library. You can still upload files from your device.</p> : readyMedia.length === 0 ? <p className="compose-library-empty">No ready media yet. Upload a file above to add it here.</p> : <div className="compose-library-grid">{readyMedia.map((asset) => {
+                const selected = selectedMedia.some((item) => item.id === asset.id);
+                return <button type="button" key={asset.id} className={`library-asset ${selected ? "is-selected" : ""}`} onClick={() => toggleMediaSelection(asset)} aria-pressed={selected} aria-label={`${selected ? "Remove" : "Add"} ${asset.originalName}`}>
+                  <span className="library-asset-preview">{asset.kind === "IMAGE" && asset.viewUrl ? <img src={asset.viewUrl} alt="" /> : asset.kind === "VIDEO" && asset.viewUrl ? <video src={asset.viewUrl} preload="metadata" aria-hidden="true" /> : <Video size={18} />}{selected && <span className="library-check"><Check size={13} /></span>}</span><span className="library-asset-name">{asset.originalName}</span>
+                </button>;
+              })}</div>}
+            </div>}
+          </section>
+        </section>
+
+        <aside className="compose-publishing">
+          <section className="compose-destinations" aria-labelledby="destinations-heading">
+            <div className="compose-section-heading"><h2 id="destinations-heading">Publish to</h2><span>{selectedChannelIds.length} selected</span></div>
+            {channelsLoading ? <div className="destination-skeleton"><Skeleton className="h-11 w-full" /><Skeleton className="h-11 w-full" /></div> : channels.length === 0 ? <div className="destination-empty"><p>No connected accounts are assigned to this workspace.</p><Link to={`/app/${workspaceId}/accounts`}>Manage accounts</Link></div> : <div className="destination-list">{channels.map((channel: WorkspaceChannel) => {
+              const selected = selectedChannelIds.includes(channel.id);
+              return <button type="button" key={channel.id} className={`destination-option ${selected ? "is-selected" : ""}`} aria-pressed={selected} onClick={() => toggleChannel(channel.id)}>
+                {channel.pictureUrl ? <img className="destination-avatar" src={channel.pictureUrl} alt="" /> : <span className="destination-avatar destination-initial">{channel.name.slice(0, 1).toUpperCase()}</span>}
+                <span className="destination-details"><strong>{channel.name}</strong><span>{formatProvider(channel.provider)}</span></span>
+                <span className="destination-check" aria-hidden="true">{selected && <Check size={13} />}</span>
+              </button>;
+            })}</div>}
+            {channels.length > 0 && <Link className="destination-manage" to={`/app/${workspaceId}/accounts`}>Manage connected accounts</Link>}
+          </section>
+
+          <section className="compose-timing" aria-labelledby="timing-heading">
+            <div className="compose-section-heading"><h2 id="timing-heading">When</h2></div>
+            <div className="publish-mode" role="group" aria-label="Choose when to publish">
+              <button type="button" aria-pressed={!isScheduling} className={!isScheduling ? "is-active" : ""} onClick={() => setIsScheduling(false)}><Send size={14} />Publish now</button>
+              <button type="button" aria-pressed={isScheduling} className={isScheduling ? "is-active" : ""} onClick={() => setIsScheduling(true)}><CalendarClock size={14} />Schedule</button>
             </div>
-          )}
-        </div>
+            {isScheduling && <div className="schedule-input"><label htmlFor="scheduled-date">Date and time</label><input id="scheduled-date" type="datetime-local" value={scheduledDateTime} onChange={(event) => setScheduledDateTime(event.target.value)} /><span>Time uses your device’s local timezone.</span></div>}
+          </section>
 
-        {/* Content Textarea */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <label className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] dark:text-zinc-400">
-              Publication Copy
-            </label>
-            <span className="text-xs font-mono text-[#6b706f] dark:text-zinc-500">
-              {content.length} characters
-            </span>
+          <div className="compose-actions">
+            <Button type="button" variant="outline" onClick={() => void handleSaveDraft()} disabled={isBusy} className="compose-save">Save draft</Button>
+            {isScheduling ? <Button type="button" onClick={() => void handleSchedulePost()} disabled={isBusy || !isPublishingAvailable || !selectedChannelIds.length} isLoading={isSchedulePending} className="compose-submit"><CalendarClock size={15} />Schedule post</Button> : <Button type="button" onClick={() => void handlePublishNow()} disabled={isBusy || !isPublishingAvailable || !selectedChannelIds.length} isLoading={isPublishing} className="compose-submit"><Send size={15} />Publish now</Button>}
           </div>
-          <Textarea
-            rows={8}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Write your update, announcement, or thought piece..."
-            className="font-sans text-sm leading-relaxed"
-          />
-        </div>
-
-        {/* Attached Media Section */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] dark:text-zinc-400 flex items-center gap-2">
-              <ImageIcon className="h-3.5 w-3.5" /> Attached Media (
-              {selectedMedia.length})
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsMediaPickerOpen(!isMediaPickerOpen)}
-              className="gap-1 text-xs"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {isMediaPickerOpen ? "Close Picker" : "Attach from Media Library"}
-            </Button>
-          </div>
-
-          {/* Attached Media Previews */}
-          {selectedMedia.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {selectedMedia.map((asset) => (
-                <div
-                  key={asset.id}
-                  className="relative rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-white overflow-hidden aspect-video group"
-                >
-                  {asset.kind === "IMAGE" && asset.viewUrl ? (
-                    <img
-                      src={asset.viewUrl}
-                      alt={asset.originalName}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-[#f2f0e9] dark:bg-[#0d0d0f] text-xs font-mono text-[#6b706f] dark:text-zinc-500">
-                      {asset.originalName}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => toggleMediaSelection(asset)}
-                    className="absolute top-1 right-1 p-1 rounded-full bg-[#161a1d]/80 text-white hover:bg-[#b23a24] transition-colors cursor-pointer"
-                    title="Remove attachment"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Inline Media Library Picker Drawer */}
-          {isMediaPickerOpen && (
-            <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-3">
-              <div className="flex items-center justify-between border-b border-[#c9c5bb] dark:border-white/[0.08] pb-2">
-                <span className="text-xs font-medium text-[#161a1d] dark:text-white">
-                  Select media assets to attach:
-                </span>
-                <span className="text-[11px] font-mono text-[#6b706f] dark:text-zinc-500">
-                  {mediaLibrary.length} available in library
-                </span>
-              </div>
-
-              {mediaLibrary.length === 0 ? (
-                <p className="text-xs text-[#6b706f] dark:text-zinc-500 py-4 text-center">
-                  No media uploaded yet. Visit the Media Library to upload
-                  images or videos.
-                </p>
-              ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1">
-                  {mediaLibrary.map((asset) => {
-                    const isSelected = selectedMedia.some(
-                      (m) => m.id === asset.id,
-                    );
-                    return (
-                      <div
-                        key={asset.id}
-                        onClick={() => toggleMediaSelection(asset)}
-                        className={`relative aspect-square rounded border cursor-pointer overflow-hidden transition-all ${
-                          isSelected
-                            ? "border-[#161a1d] ring-2 ring-[#161a1d]"
-                            : "border-[#c9c5bb] dark:border-white/[0.08] hover:border-[#161a1d]"
-                        }`}
-                      >
-                        {asset.viewUrl ? (
-                          <img
-                            src={asset.viewUrl}
-                            alt={asset.originalName}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-[#e8e6df] text-[10px] text-[#6b706f] dark:text-zinc-500">
-                            {asset.kind}
-                          </div>
-                        )}
-                        {isSelected && (
-                          <div className="absolute inset-0 bg-[#161a1d]/30 flex items-center justify-center">
-                            <span className="p-1 rounded-full bg-[#161a1d] text-white">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Scheduling Section */}
-        <div className="p-4 rounded border border-[#c9c5bb] dark:border-white/[0.08] bg-[#faf9f5] dark:bg-[#1c1c1f] space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold uppercase tracking-wider text-[#4c5359] dark:text-zinc-400 flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isScheduling}
-                onChange={(e) => setIsScheduling(e.target.checked)}
-                className="rounded border-[#c9c5bb] dark:border-white/[0.08] text-[#161a1d] dark:text-white"
-              />
-              Schedule for Later (Postiz / Temporal)
-            </label>
-            <span className="text-[11px] font-mono text-[#6b706f] dark:text-zinc-500">
-              Workspace Timezone: UTC
-            </span>
-          </div>
-
-          {isScheduling && (
-            <div className="pt-2">
-              <Input
-                type="datetime-local"
-                value={scheduledDateTime}
-                onChange={(e) => setScheduledDateTime(e.target.value)}
-                className="max-w-xs text-xs font-mono"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Action Controls Bar */}
-        <div className="pt-4 border-t border-[#c9c5bb] dark:border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(`/app/${workspaceId}/posts`)}
-          >
-            Cancel
-          </Button>
-
-          <div className="flex items-center gap-2">
-            {/* Action 1: Save Draft (always available, offline safe) */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleSaveDraft()}
-              isLoading={isCreating || isUpdating}
-              disabled={isBusy}
-              className="gap-1.5"
-            >
-              <Save className="h-3.5 w-3.5" />
-              Save Draft
-            </Button>
-
-            {/* Action 2: Schedule Post */}
-            {isScheduling ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleSchedulePost}
-                isLoading={isSchedulePending}
-                disabled={
-                  isBusy ||
-                  !isEngineConnected ||
-                  selectedChannelIds.length === 0
-                }
-                className="gap-1.5"
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                Schedule
-              </Button>
-            ) : (
-              /* Action 3: Publish Now */
-              <Button
-                type="button"
-                size="sm"
-                onClick={handlePublishNow}
-                isLoading={isPublishing}
-                disabled={
-                  isBusy ||
-                  !isEngineConnected ||
-                  selectedChannelIds.length === 0
-                }
-                className="gap-1.5 bg-[#161a1d] text-white hover:bg-[#2b3035]"
-              >
-                <Send className="h-3.5 w-3.5" />
-                Publish Now
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+          {!selectedChannelIds.length && channels.length > 0 && <p className="compose-action-hint">Choose a destination to continue.</p>}
+        </aside>
+      </form>
     </div>
   );
 }

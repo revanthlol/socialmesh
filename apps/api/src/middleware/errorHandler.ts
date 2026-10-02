@@ -5,6 +5,27 @@ import type {
   ErrorRequestHandler,
 } from "express";
 import { AppError } from "../lib/errors.js";
+import {
+  PostizError,
+  PostizAuthenticationError,
+  PostizValidationError,
+  PostizRateLimitError,
+  PostizTimeoutError,
+  PostizNotFoundError,
+} from "../lib/postiz/errors.js";
+
+export function sanitizeErrorMessage(msg: string): string {
+  if (!msg) return "Publishing failed";
+  return msg
+    .replace(
+      /(access_token|client_secret|code|password|secret|key)=([^& \n]+)/gi,
+      "$1=[REDACTED]",
+    )
+    .replace(/(Bearer\s+)[A-Za-z0-9\-._~+/]+=*/gi, "$1[REDACTED]")
+    .replace(/X-Amz-Signature=[0-9a-fA-F]+/g, "X-Amz-Signature=[REDACTED]")
+    .replace(/X-Amz-Credential=[^& \n]+/g, "X-Amz-Credential=[REDACTED]")
+    .replace(/sm_session=[A-Za-z0-9]+/g, "sm_session=[REDACTED]");
+}
 
 export const errorHandler: ErrorRequestHandler = (
   err: unknown,
@@ -22,8 +43,54 @@ export const errorHandler: ErrorRequestHandler = (
     res.status(err.statusCode).json({
       error: {
         code: err.code,
-        message: err.message,
+        message: sanitizeErrorMessage(err.message),
         details: err.details,
+        requestId,
+      },
+    });
+    return;
+  }
+
+  // Handle Postiz engine errors safely without exposing provider credentials or raw tokens
+  if (err instanceof PostizError) {
+    let statusCode = err.statusCode || 502;
+    let code = err.code || "PUBLISHING_ENGINE_ERROR";
+    let message = sanitizeErrorMessage(err.message);
+
+    if (err instanceof PostizAuthenticationError) {
+      statusCode = 502;
+      code = "PROVIDER_CREDENTIALS_UNAVAILABLE";
+      message = "Social publishing engine authentication failed";
+    } else if (err instanceof PostizValidationError) {
+      statusCode = 400;
+      code = "PROVIDER_VALIDATION_ERROR";
+    } else if (err instanceof PostizRateLimitError) {
+      statusCode = 429;
+      code = "PROVIDER_RATE_LIMIT";
+      message = "Social provider rate limit reached. Please try again later.";
+    } else if (err instanceof PostizTimeoutError) {
+      statusCode = 504;
+      code = "PROVIDER_TIMEOUT";
+      message = "Social publishing engine request timed out";
+    } else if (err instanceof PostizNotFoundError) {
+      statusCode = 404;
+      code = "PROVIDER_RESOURCE_NOT_FOUND";
+    }
+
+    req.log?.warn?.(
+      {
+        code,
+        statusCode,
+        originalMessage: sanitizeErrorMessage(err.message),
+        details: err.details,
+      },
+      "Postiz engine error occurred",
+    );
+
+    res.status(statusCode).json({
+      error: {
+        code,
+        message,
         requestId,
       },
     });

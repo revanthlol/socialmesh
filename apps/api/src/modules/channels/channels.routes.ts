@@ -36,6 +36,13 @@ router.post(
   channelsController.getConnectUrl,
 );
 
+// Members can view analytics for an assigned channel
+router.get(
+  "/:channelId/analytics",
+  validate({ params: channelParamSchema }),
+  channelsController.getAnalytics,
+);
+
 // Only OWNER can unassign a channel
 router.delete(
   "/:channelId",

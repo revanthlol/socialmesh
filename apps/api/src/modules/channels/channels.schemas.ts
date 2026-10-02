@@ -23,9 +23,18 @@ export const workspaceOnlyParamSchema = z.object({
   workspaceId: z.string().uuid("Invalid workspace ID format"),
 });
 
-export const resolveOAuthSchema = z.object({
-  stateToken: z.string().trim().min(1, "stateToken is required").optional(),
-});
+export const resolveOAuthSchema = z
+  .object({
+    stateToken: z.string().trim().min(1).optional(),
+    state: z.string().trim().min(1).optional(),
+    code: z.string().trim().min(1).optional(),
+    provider: z.string().trim().min(1).optional(),
+    timezone: z.string().optional(),
+    pageId: z.string().optional(),
+  })
+  .refine((data) => Boolean(data.stateToken || data.state), {
+    message: "Either stateToken or state is required",
+  });
 
 export type AssignChannelInput = z.infer<typeof assignChannelSchema>;
 export type ConnectUrlInput = z.infer<typeof connectUrlSchema>;

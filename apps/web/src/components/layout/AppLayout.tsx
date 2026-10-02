@@ -279,6 +279,7 @@ export function AppLayout() {
 
   return (
     <div className="min-h-dvh bg-[#f2f0e9] dark:bg-[#0d0d0f] dark:bg-[#0d0d0f] text-[#161a1d] dark:text-white dark:text-white flex relative">
+      <a className="skip-link" href="#main-content">Skip to content</a>
 
       {/* ── Desktop Sidebar ───────────────────────────────────────────────────── */}
       {!isMobile && (
@@ -307,6 +308,8 @@ export function AppLayout() {
                 onClick={() => setIsMobileOpen(true)}
                 className="p-1.5 -ml-1 rounded-md text-[#161a1d] dark:text-white dark:text-white hover:bg-[#e8e6df] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
                 aria-label="Open menu"
+                aria-expanded={isMobileOpen}
+                aria-controls="mobile-navigation"
               >
                 <Menu className="h-5 w-5" />
               </button>
@@ -336,6 +339,7 @@ export function AppLayout() {
                   className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
                 />
                 <motion.aside
+                  id="mobile-navigation"
                   initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }}
                   transition={{ type: "spring", damping: 28, stiffness: 320 }}
                   className="fixed inset-y-0 left-0 w-64 z-50 flex flex-col bg-[#faf9f5] dark:bg-[#1c1c1f] dark:bg-[#141517] border-r border-[#c9c5bb] dark:border-white/[0.08] dark:border-white/[0.07] shadow-2xl"
@@ -371,6 +375,8 @@ export function AppLayout() {
       >
         <AnimatePresence mode="wait">
           <motion.main
+            id="main-content"
+            tabIndex={-1}
             key={location.pathname}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}

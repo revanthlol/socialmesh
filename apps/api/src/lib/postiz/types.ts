@@ -56,7 +56,17 @@ export const PostizIntegrationSchema = z.object({
   identifier: z.string(),
   picture: z.string().nullable().optional(),
   disabled: z.boolean().optional(),
-  profile: z.record(z.string(), z.unknown()).nullable().optional(),
+  profile: z
+    .union([z.string(), z.record(z.string(), z.unknown())])
+    .nullable()
+    .optional(),
+  customer: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .nullable()
+    .optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
@@ -92,6 +102,8 @@ export const PostizPostSchema = z.object({
   publishDate: z.string().optional(),
   content: z.string().optional(),
   releaseId: z.string().nullable().optional(),
+  releaseURL: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
   integrations: z.array(z.unknown()).optional(),
   integration: z.unknown().optional(),
   createdAt: z.string().optional(),
@@ -135,22 +147,36 @@ export type PostizUploadFromUrlResponse = z.infer<
 
 export interface PostizIntegrationTarget {
   id: string;
-  customContent?: string;
+  provider?: string | undefined;
+  customContent?: string | undefined;
+  settings?: Record<string, unknown> | undefined;
 }
+
+export interface PostizMediaItem {
+  id: string;
+  path: string;
+  alt?: string | undefined;
+  thumbnail?: string | undefined;
+}
+
+export type PostizMediaInputItem =
+  | string
+  | PostizMediaItem
+  | { id?: string | undefined; path?: string | undefined; url?: string | undefined; alt?: string | undefined };
 
 export interface PostizCreatePostPayload {
   type: "draft" | "schedule" | "now";
   date?: string;
   content?: string;
   integrations?: (string | PostizIntegrationTarget)[];
-  media?: (string | { id: string; path?: string })[];
+  media?: PostizMediaInputItem[];
   settings?: Record<string, unknown>;
 }
 
 export interface PostizCreateDraftInput {
   content?: string;
   integrations?: (string | PostizIntegrationTarget)[];
-  media?: (string | { id: string; path?: string })[];
+  media?: PostizMediaInputItem[];
   settings?: Record<string, unknown>;
 }
 
@@ -162,3 +188,4 @@ export interface PostizSchedulePostInput extends PostizCreateDraftInput {
 }
 
 export interface PostizPublishNowInput extends PostizCreateDraftInput {}
+

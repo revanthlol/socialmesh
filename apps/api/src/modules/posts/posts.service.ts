@@ -1,11 +1,15 @@
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../lib/errors.js";
-import { createPresignedViewUrl } from "../../lib/r2.js";
+import { createPresignedViewUrl, createDurableMediaUrl } from "../../lib/r2.js";
 import {
   getPublishingEngine,
   type PublishingEngine,
 } from "../../services/publishing.js";
-import type { PostStatus, TargetStatus } from "../../generated/prisma/enums.js";
+import type {
+  PostStatus,
+  TargetStatus,
+  MediaKind,
+} from "../../generated/prisma/enums.js";
 import type {
   CreatePostInput,
   UpdatePostInput,
@@ -67,6 +71,123 @@ export function aggregatePostStatus(
   return "DRAFT";
 }
 
+/**
+ * Validates post content and attached media against assigned target channels.
+ * Enforces provider capabilities for Facebook, Instagram, Threads, and LinkedIn.
+ */
+export function validatePostForTargets(
+  content: string,
+  mediaAssets: Array<{ kind: MediaKind | string; originalName?: string }>,
+  channels: Array<{ provider: string; name?: string }>,
+) {
+  if (channels.length === 0) {
+    return;
+  }
+
+  const images = mediaAssets.filter((m) => m.kind === "IMAGE");
+  const videos = mediaAssets.filter((m) => m.kind === "VIDEO");
+  const totalMedia = mediaAssets.length;
+  const contentLength = (content || "").trim().length;
+
+  for (const channel of channels) {
+    const rawProvider = (channel.provider || "").toLowerCase();
+    const channelName = channel.name || channel.provider;
+
+    if (rawProvider.includes("facebook")) {
+      if (images.length > 0 && videos.length > 0) {
+        throw AppError.badRequest(
+          "Facebook does not support mixing images and videos in a single post.",
+        );
+      }
+      if (videos.length > 1) {
+        throw AppError.badRequest(
+          "Facebook does not support multiple videos in a single post.",
+        );
+      }
+      if (images.length > 10) {
+        throw AppError.badRequest(
+          "Facebook supports a maximum of 10 photos per post.",
+        );
+      }
+      if (contentLength > 63206) {
+        throw AppError.badRequest(
+          "Facebook posts cannot exceed 63,206 characters.",
+        );
+      }
+    } else if (rawProvider.includes("instagram")) {
+      if (totalMedia === 0) {
+        throw AppError.badRequest(
+          "Instagram requires at least one image or video attachment.",
+        );
+      }
+      if (totalMedia > 10) {
+        throw AppError.badRequest(
+          "Instagram supports a maximum of 10 media items per carousel.",
+        );
+      }
+      if (contentLength > 2200) {
+        throw AppError.badRequest(
+          "Instagram posts cannot exceed 2,200 characters.",
+        );
+      }
+    } else if (rawProvider.includes("threads")) {
+      if (contentLength > 500) {
+        throw AppError.badRequest(
+          "Threads posts cannot exceed 500 characters.",
+        );
+      }
+      if (totalMedia > 10) {
+        throw AppError.badRequest(
+          "Threads supports a maximum of 10 media items per post.",
+        );
+      }
+    } else if (rawProvider.includes("linkedin")) {
+      if (contentLength > 3000) {
+        throw AppError.badRequest(
+          "LinkedIn posts cannot exceed 3,000 characters.",
+        );
+      }
+      if (images.length > 0 && videos.length > 0) {
+        throw AppError.badRequest(
+          "LinkedIn does not support mixing images and videos in a single post.",
+        );
+      }
+      if (videos.length > 1) {
+        throw AppError.badRequest(
+          "LinkedIn does not support multiple videos in a single post.",
+        );
+      }
+      if (images.length > 9) {
+        throw AppError.badRequest(
+          "LinkedIn supports a maximum of 9 images per post.",
+        );
+      }
+    } else {
+      if (images.length > 0 && videos.length > 0) {
+        throw AppError.badRequest(
+          `${channelName} does not support mixing images and videos in a single post.`,
+        );
+      }
+      if (videos.length > 1) {
+        throw AppError.badRequest(
+          `${channelName} does not support multiple videos in a single post.`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Validates attached media items against assigned target channels.
+ * Enforces provider capabilities (retained for backward compatibility).
+ */
+export function validateMediaForTargets(
+  mediaAssets: Array<{ kind: MediaKind | string; originalName?: string }>,
+  channels: Array<{ provider: string; name?: string }>,
+) {
+  return validatePostForTargets("", mediaAssets, channels);
+}
+
 async function formatPost(post: any) {
   const media = await Promise.all(
     (post.media || []).map(async (pm: any) => {
@@ -102,6 +223,8 @@ async function formatPost(post: any) {
     status: t.status,
     scheduledFor: t.scheduledFor ?? null,
     publishedAt: t.publishedAt ?? null,
+    providerPostUrl: t.providerPostUrl ?? null,
+    providerPostId: t.providerPostId ?? null,
     lastError: t.lastError ?? null,
     lastErrorCode: t.lastErrorCode ?? null,
     channel: t.channel
@@ -140,6 +263,8 @@ async function formatPost(post: any) {
   };
 }
 
+export type FormattedPost = Awaited<ReturnType<typeof formatPost>>;
+
 export class PostsService {
   constructor(
     private readonly publishingEngine: PublishingEngine = getPublishingEngine(),
@@ -147,8 +272,12 @@ export class PostsService {
 
   async listPosts(
     workspaceId: string,
-    options: { status?: any; limit?: number | undefined },
-  ) {
+    options: {
+      status?: any;
+      limit?: number | undefined;
+      skipReconcile?: boolean;
+    },
+  ): Promise<FormattedPost[]> {
     const where: any = {
       workspaceId,
     };
@@ -178,10 +307,28 @@ export class PostsService {
       take: options.limit ?? 50,
     });
 
+    if (!options.skipReconcile) {
+      const processingPosts = posts.filter(
+        (p) => p.status === "PROCESSING" || p.status === "PUBLISHING",
+      );
+      if (processingPosts.length > 0) {
+        await Promise.allSettled(
+          processingPosts.map((p) =>
+            this.reconcilePostStatus(workspaceId, p.id),
+          ),
+        );
+        return this.listPosts(workspaceId, { ...options, skipReconcile: true });
+      }
+    }
+
     return Promise.all(posts.map(formatPost));
   }
 
-  async getPost(workspaceId: string, postId: string) {
+  async getPost(
+    workspaceId: string,
+    postId: string,
+    options?: { skipReconcile?: boolean },
+  ): Promise<FormattedPost> {
     const post = await prisma.post.findFirst({
       where: {
         id: postId,
@@ -209,6 +356,13 @@ export class PostsService {
       throw AppError.notFound("Post not found");
     }
 
+    if (
+      !options?.skipReconcile &&
+      (post.status === "PROCESSING" || post.status === "PUBLISHING")
+    ) {
+      return this.reconcilePostStatus(workspaceId, postId);
+    }
+
     return formatPost(post);
   }
 
@@ -221,15 +375,16 @@ export class PostsService {
     const channelIds = input.channelIds || [];
 
     // Verify media assets exist and belong to workspace
+    let foundMediaAssets: any[] = [];
     if (mediaIds.length > 0) {
-      const count = await prisma.mediaAsset.count({
+      foundMediaAssets = await prisma.mediaAsset.findMany({
         where: {
           id: { in: mediaIds },
           workspaceId,
           deletedAt: null,
         },
       });
-      if (count !== mediaIds.length) {
+      if (foundMediaAssets.length !== mediaIds.length) {
         throw AppError.badRequest(
           "One or more selected media assets could not be found in this workspace",
         );
@@ -237,18 +392,23 @@ export class PostsService {
     }
 
     // Verify channels exist and belong to workspace
+    let foundChannels: any[] = [];
     if (channelIds.length > 0) {
-      const count = await prisma.workspaceChannel.count({
+      foundChannels = await prisma.workspaceChannel.findMany({
         where: {
           id: { in: channelIds },
           workspaceId,
         },
       });
-      if (count !== channelIds.length) {
+      if (foundChannels.length !== channelIds.length) {
         throw AppError.badRequest(
           "One or more selected channels do not belong to this workspace",
         );
       }
+    }
+
+    if (foundChannels.length > 0) {
+      validatePostForTargets(input.content, foundMediaAssets, foundChannels);
     }
 
     const post = await prisma.$transaction(async (tx) => {
@@ -316,8 +476,24 @@ export class PostsService {
       throw AppError.notFound("Post not found");
     }
 
-    if (existing.status !== "DRAFT") {
-      throw AppError.badRequest("Only draft posts can be edited directly");
+    if (existing.status !== "DRAFT" && existing.status !== "SCHEDULED") {
+      throw AppError.badRequest("Only draft or scheduled posts can be edited");
+    }
+
+    const wasScheduled = existing.status === "SCHEDULED";
+    if (wasScheduled) {
+      const scheduledTargets = await prisma.postTarget.findMany({
+        where: { postId, status: "SCHEDULED" },
+      });
+      for (const target of scheduledTargets) {
+        if (target.postizPostId) {
+          try {
+            await this.publishingEngine.cancelPost(target.postizPostId);
+          } catch {
+            // Ignore cancellation error if already cancelled remotely
+          }
+        }
+      }
     }
 
     const data: Record<string, any> = {
@@ -398,7 +574,11 @@ export class PostsService {
         }
       }
 
-      return tx.post.update({
+      if (wasScheduled && data.scheduledFor === null) {
+        data.status = "DRAFT";
+      }
+
+      const postAfterUpdate = await tx.post.update({
         where: { id: postId },
         data,
         include: {
@@ -412,7 +592,30 @@ export class PostsService {
           },
         },
       });
+
+      const effectiveMediaAssets = postAfterUpdate.media
+        .map((pm) => pm.mediaAsset)
+        .filter(Boolean);
+      const effectiveChannels = postAfterUpdate.targets
+        .map((t) => t.channel)
+        .filter(Boolean) as any[];
+
+      validatePostForTargets(
+        postAfterUpdate.content,
+        effectiveMediaAssets,
+        effectiveChannels,
+      );
+
+      return postAfterUpdate;
     });
+
+    if (
+      wasScheduled &&
+      updated.scheduledFor &&
+      updated.scheduledFor.getTime() > Date.now()
+    ) {
+      return this.schedulePost(workspaceId, postId);
+    }
 
     return formatPost(updated);
   }
@@ -470,28 +673,56 @@ export class PostsService {
       );
     }
 
+    const attachedMediaAssets = post.media
+      .map((pm) => pm.mediaAsset)
+      .filter(Boolean);
+    validatePostForTargets(
+      post.content,
+      attachedMediaAssets,
+      assignedTargets.map((t) => t.channel!),
+    );
+
     const postizIntegrationIds = assignedTargets.map(
       (t) => t.channel!.postizIntegrationId,
     );
 
-    // Task 7: Media handoff via R2 presigned view URLs
-    const mediaUrls: string[] = [];
+    // Media handoff via reachable R2 presigned view URLs
+    const mediaItems: Array<{ id: string; url: string }> = [];
     for (const pm of post.media) {
       if (pm.mediaAsset && pm.mediaAsset.status === "READY") {
         const presignedUrl = await createPresignedViewUrl(
           pm.mediaAsset.objectKey,
-          900,
+          3600,
         );
-        const imported = await this.publishingEngine.importMedia(presignedUrl);
-        mediaUrls.push(imported.url);
+        mediaItems.push({
+          id: pm.mediaAsset.id,
+          url: presignedUrl,
+        });
       }
     }
 
+    if (post.media.length > 0 && mediaItems.length !== post.media.length) {
+      throw AppError.badRequest(
+        "One or more attached media assets are not ready or missing in storage",
+      );
+    }
+
     try {
+      const targets = assignedTargets.map((t) => ({
+        channelId: t.channel!.postizIntegrationId,
+        provider: t.channel!.provider,
+        settings: t.channel!.provider.toLowerCase().includes("instagram")
+          ? { post_type: "post" }
+          : undefined,
+      }));
+
       const result = await this.publishingEngine.publishNow({
         content: post.content,
         channelIds: postizIntegrationIds,
-        mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+        targets,
+        media: mediaItems.length > 0 ? mediaItems : undefined,
+        mediaUrls:
+          mediaItems.length > 0 ? mediaItems.map((m) => m.url) : undefined,
       });
 
       const updated = await prisma.$transaction(async (tx) => {
@@ -597,29 +828,74 @@ export class PostsService {
       );
     }
 
+    const attachedMediaAssets = post.media
+      .map((pm) => pm.mediaAsset)
+      .filter(Boolean);
+    validatePostForTargets(
+      post.content,
+      attachedMediaAssets,
+      assignedTargets.map((t) => t.channel!),
+    );
+
     const postizIntegrationIds = assignedTargets.map(
       (t) => t.channel!.postizIntegrationId,
     );
 
-    // Task 7: Media handoff via R2 presigned view URLs
-    const mediaUrls: string[] = [];
+    const diffSeconds = Math.ceil(
+      (scheduledDate.getTime() - Date.now()) / 1000,
+    );
+
+    // Media handoff: If scheduled within 5 days, use a direct R2 presigned URL covering the execution window.
+    // If scheduled beyond 5 days (e.g. weeks/months into future), generate a durable signature-verified URL
+    // that resolves/refreshes the presigned R2 URL at publish time without expiring!
+    const mediaItems: Array<{ id: string; url: string }> = [];
     for (const pm of post.media) {
       if (pm.mediaAsset && pm.mediaAsset.status === "READY") {
-        const presignedUrl = await createPresignedViewUrl(
-          pm.mediaAsset.objectKey,
-          900,
-        );
-        const imported = await this.publishingEngine.importMedia(presignedUrl);
-        mediaUrls.push(imported.url);
+        let mediaUrl: string;
+        if (diffSeconds <= 432000) {
+          mediaUrl = await createPresignedViewUrl(
+            pm.mediaAsset.objectKey,
+            Math.min(604800, diffSeconds + 86400),
+          );
+        } else {
+          mediaUrl = createDurableMediaUrl(
+            workspaceId,
+            pm.mediaAsset.id,
+            pm.mediaAsset.objectKey,
+            pm.mediaAsset.originalName,
+            scheduledDate,
+          );
+        }
+        mediaItems.push({
+          id: pm.mediaAsset.id,
+          url: mediaUrl,
+        });
       }
     }
 
+    if (post.media.length > 0 && mediaItems.length !== post.media.length) {
+      throw AppError.badRequest(
+        "One or more attached media assets are not ready or missing in storage",
+      );
+    }
+
     try {
+      const targets = assignedTargets.map((t) => ({
+        channelId: t.channel!.postizIntegrationId,
+        provider: t.channel!.provider,
+        settings: t.channel!.provider.toLowerCase().includes("instagram")
+          ? { post_type: "post" }
+          : undefined,
+      }));
+
       const result = await this.publishingEngine.schedulePost({
         content: post.content,
         scheduledAt: scheduledDate.toISOString(),
         channelIds: postizIntegrationIds,
-        mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+        targets,
+        media: mediaItems.length > 0 ? mediaItems : undefined,
+        mediaUrls:
+          mediaItems.length > 0 ? mediaItems.map((m) => m.url) : undefined,
       });
 
       const updated = await prisma.$transaction(async (tx) => {
@@ -750,7 +1026,10 @@ export class PostsService {
    * If remote engine state is available, transitions PROCESSING/SCHEDULED targets to PUBLISHED or FAILED.
    * Derives and updates parent post status using aggregatePostStatus.
    */
-  async reconcilePostStatus(workspaceId: string, postId: string) {
+  async reconcilePostStatus(
+    workspaceId: string,
+    postId: string,
+  ): Promise<FormattedPost> {
     const post = await prisma.post.findFirst({
       where: { id: postId, workspaceId },
       include: {
@@ -763,31 +1042,93 @@ export class PostsService {
     }
 
     if (post.status === "DRAFT" || post.status === "CANCELLED") {
-      return this.getPost(workspaceId, postId);
+      return this.getPost(workspaceId, postId, { skipReconcile: true });
     }
 
-    // Reconcile targets that are in non-terminal states
+    // Reconcile targets that are in non-terminal states and have a remote Postiz ID
     const targetStatuses: TargetStatus[] = [];
+
     for (const target of post.targets) {
+      let currentStatus = target.status;
+
       if (
-        (target.status === "PROCESSING" || target.status === "SCHEDULED") &&
+        (target.status === "PROCESSING" ||
+          target.status === "SCHEDULED" ||
+          target.status === "PUBLISHING" ||
+          target.status === "DISPATCHED") &&
         target.postizPostId
       ) {
-        targetStatuses.push(target.status);
-      } else {
-        targetStatuses.push(target.status);
+        try {
+          const approxDate =
+            target.scheduledFor ?? post.scheduledFor ?? post.createdAt;
+          const remote = await this.publishingEngine.getPostStatus(
+            target.postizPostId,
+            approxDate,
+          );
+
+          if (remote) {
+            if (remote.state === "PUBLISHED") {
+              currentStatus = "PUBLISHED";
+              await prisma.postTarget.update({
+                where: { id: target.id },
+                data: {
+                  status: "PUBLISHED",
+                  publishedAt: new Date(),
+                  providerPostUrl: remote.releaseUrl ?? target.providerPostUrl,
+                  providerPostId: remote.releaseId ?? target.providerPostId,
+                  lastError: null,
+                  lastErrorCode: null,
+                },
+              });
+            } else if (remote.state === "ERROR") {
+              currentStatus = "FAILED";
+              await prisma.postTarget.update({
+                where: { id: target.id },
+                data: {
+                  status: "FAILED",
+                  lastError: remote.error || "Publishing failed on provider",
+                  lastErrorCode: "PUBLISH_FAILED",
+                },
+              });
+            }
+          }
+        } catch {
+          // If remote engine lookup fails, retain current status
+        }
       }
+
+      targetStatuses.push(currentStatus);
     }
 
     const newPostStatus = aggregatePostStatus(targetStatuses);
+    const postUpdates: Record<string, any> = {};
+
     if (newPostStatus !== post.status) {
+      postUpdates.status = newPostStatus;
+      if (newPostStatus === "PUBLISHED" && !post.publishedAt) {
+        postUpdates.publishedAt = new Date();
+      }
+    }
+
+    if (newPostStatus === "FAILED") {
+      const failedTarget = post.targets.find(
+        (t) => t.status === "FAILED" || targetStatuses.includes("FAILED"),
+      );
+      if (failedTarget?.lastError && !post.lastError) {
+        postUpdates.lastError = failedTarget.lastError;
+        postUpdates.lastErrorCode =
+          failedTarget.lastErrorCode || "PUBLISH_FAILED";
+      }
+    }
+
+    if (Object.keys(postUpdates).length > 0) {
       await prisma.post.update({
         where: { id: post.id },
-        data: { status: newPostStatus },
+        data: postUpdates,
       });
     }
 
-    return this.getPost(workspaceId, postId);
+    return this.getPost(workspaceId, postId, { skipReconcile: true });
   }
 }
 
